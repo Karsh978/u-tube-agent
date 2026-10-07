@@ -4,7 +4,7 @@
   "description": "Agentic AI studio for YouTube automation using free-tier APIs",
   "main": "public/index.html",
   "scripts": {
-    "start": "netlify dev"
+   "start": "node server.js"
   },
   "dependencies": {
     "@google/genai": "^2.27.0",
