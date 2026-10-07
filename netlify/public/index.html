@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>YouTube Agentic AI Studio</title>
+<meta name="description" content="Turn a video topic into a title, description, tags and script outline." />
+<meta name="theme-color" content="#151820" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#151820; --panel:#1C2029; --raised:#232835; --line:#2C3340;
+  --text:#E9ECF2; --muted:#9BA4B5; --faint:#6C7588;
+  --red:#FF2D4B; --red-press:#E0213E; --amber:#F4B740; --ok:#4CC38A;
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"Instrument Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html{color-scheme:dark}
+body{background:var(--bg);color:var(--text);font:400 15px/1.55 var(--body);min-height:100vh;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+.bar{display:flex;align-items:center;gap:10px;padding:16px clamp(16px,4vw,40px);border-bottom:1px solid var(--line)}
+.logo{width:30px;height:21px;background:var(--red);border-radius:6px;display:grid;place-items:center}
+.logo::after{content:"";border-left:8px solid #fff;border-top:5px solid transparent;border-bottom:5px solid transparent;margin-left:2px}
+.bar b{font:700 17px var(--display);letter-spacing:-.01em}
+.bar span{color:var(--faint);font-size:13px;margin-left:auto}
+
+.shell{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:clamp(20px,3vw,40px);max-width:1180px;margin:0 auto;padding:clamp(20px,4vw,40px) clamp(16px,4vw,40px) 64px;align-items:start}
+@media(max-width:860px){.shell{grid-template-columns:1fr}}
+
+.brief{position:sticky;top:20px}
+@media(max-width:860px){.brief{position:static}}
+h1{font:700 clamp(28px,4vw,38px)/1.08 var(--display);letter-spacing:-.025em;margin-bottom:10px}
+.lede{color:var(--muted);margin-bottom:22px;max-width:36ch}
+label.f{display:block;font-weight:600;font-size:13px;margin-bottom:6px}
+.field{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;transition:border-color .15s}
+.field:hover{border-color:#3a4252}
+.field:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(244,183,64,.18)}
+textarea.field{resize:vertical;min-height:84px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.go{width:100%;margin-top:18px;background:var(--red);border:0;border-radius:10px;padding:13px 16px;font-weight:600;cursor:pointer;display:flex;gap:10px;justify-content:center;align-items:center;transition:background .15s,transform .1s}
+.go:hover{background:var(--red-press)}
+.go:active{transform:translateY(1px)}
+.go[disabled]{opacity:.7;cursor:progress}
+.spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:r .7s linear infinite;display:none}
+.go[disabled] .spin{display:block}
+@keyframes r{to{transform:rotate(360deg)}}
+.hint{font-size:12.5px;color:var(--faint);margin-top:10px}
+.eg{margin-top:22px}
+.eg p{font-size:13px;color:var(--muted);margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;transition:.15s}
+.chip:hover{border-color:var(--muted);color:var(--text)}
+
+.out{display:grid;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+.head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.head h2{font:600 14px var(--body);color:var(--muted)}
+.meter{font-size:12.5px;color:var(--faint);margin-left:auto;font-variant-numeric:tabular-nums}
+.meter.warn{color:var(--amber)}
+.cp{background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:5px 11px;font-size:13px;cursor:pointer;transition:.15s}
+.cp:hover{border-color:var(--muted)}
+.cp.done{color:var(--ok);border-color:var(--ok)}
+.title{font:700 clamp(22px,3vw,28px)/1.2 var(--display);letter-spacing:-.015em}
+.desc{color:#C5CBD8;white-space:pre-wrap;max-width:68ch}
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:13px;color:var(--text);cursor:pointer;transition:.15s}
+.tag:hover{border-color:var(--amber)}
+.tag.done{border-color:var(--ok);color:var(--ok)}
+
+.tl{list-style:none;padding:0;position:relative;display:grid;gap:14px}
+.tl::before{content:"";position:absolute;left:13px;top:8px;bottom:8px;width:2px;background:var(--line)}
+.tl li{position:relative;padding-left:44px;max-width:68ch;color:#C5CBD8}
+.tl i{position:absolute;left:0;top:-1px;width:28px;height:28px;border-radius:50%;background:var(--raised);border:2px solid var(--amber);display:grid;place-items:center;font:600 12px var(--body);font-style:normal;color:var(--amber)}
+.tl li:first-child i{background:var(--amber);color:#1a1405}
+
+.state{border:1px dashed var(--line);border-radius:14px;padding:44px 24px;text-align:center;color:var(--muted)}
+.state strong{display:block;color:var(--text);font:600 18px var(--display);margin-bottom:6px}
+.err{border-color:rgba(255,45,75,.5);background:rgba(255,45,75,.06)}
+.err strong{color:#ff8497}
+.sk{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--raised) 25%,#2c3342 50%,var(--raised) 75%);background-size:200% 100%;animation:sh 1.3s infinite;margin-top:10px}
+@keyframes sh{to{background-position:-200% 0}}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,20px);background:var(--text);color:#151820;padding:9px 16px;border-radius:10px;font-weight:600;font-size:14px;opacity:0;pointer-events:none;transition:.2s}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.hidden{display:none!important}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="logo" aria-hidden="true"></div>
+  <b>Agentic AI Studio</b>
+  <span>for YouTube creators</span>
+</header>
+
+<main class="shell">
+  <section class="brief" aria-labelledby="h">
+    <h1 id="h">Plan your next video in one pass</h1>
+    <p class="lede">Enter a topic and get a title, description, tags and a script outline you can copy straight into YouTube.</p>
+
+    <form id="form" novalidate>
+      <label class="f" for="topic">Video topic</label>
+      <textarea id="topic" class="field" maxlength="200" placeholder="e.g. MERN stack roadmap for 2026" required></textarea>
+      <p class="hint"><span id="count">0</span>/200 · Press Ctrl + Enter to generate</p>
+      <button class="go" id="go" type="submit"><span class="spin" aria-hidden="true"></span><span id="goText">Generate video plan</span></button>
+    </form>
+
+    <div class="eg">
+      <p>Try one of these</p>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="eg hidden" id="recentWrap">
+      <p>Recent topics</p>
+      <div class="chips" id="recent"></div>
+    </div>
+  </section>
+
+  <section class="out" id="out" aria-live="polite" aria-busy="false">
+    <div class="state" id="empty">
+      <strong>Your video plan will appear here</strong>
+      Add a topic on the left to get started.
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const topic = $("topic"), go = $("go"), out = $("out");
+  const EXAMPLES = ["MERN stack roadmap 2026", "How I learned DSA in 90 days", "Build a ChatGPT clone from scratch", "Top VS Code extensions for web developers"];
+  const KEY = "yt-studio-recent";
+  let last = null, toastTimer;
+
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const toast = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 1600); };
+
+  async function copy(text, btn, label) {
+    try { await navigator.clipboard.writeText(text); }
+    catch { const a = el("textarea"); a.value = text; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); }
+    toast(label ? label + " copied" : "Copied");
+    if (btn) { btn.classList.add("done"); setTimeout(() => btn.classList.remove("done"), 1200); }
+  }
+
+  const getRecent = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+  const saveRecent = (t) => { try { localStorage.setItem(KEY, JSON.stringify([t, ...getRecent().filter(x => x !== t)].slice(0, 5))); } catch {} renderRecent(); };
+  function chips(box, list) { box.replaceChildren(...list.map(t => { const b = el("button", "chip", t); b.type = "button"; b.onclick = () => { topic.value = t; count(); submit(); }; return b; })); }
+  function renderRecent() { const r = getRecent(); $("recentWrap").classList.toggle("hidden", !r.length); chips($("recent"), r); }
+  const count = () => { $("count").textContent = topic.value.length; };
+
+  function card(title, meter, copyText, label) {
+    const c = el("div", "card"), h = el("div", "head");
+    h.appendChild(el("h2", "", title));
+    if (meter) h.appendChild(meter);
+    if (copyText) { const b = el("button", "cp", "Copy"); b.type = "button"; b.onclick = () => copy(copyText, b, label || title); if (!meter) b.style.marginLeft = "auto"; h.appendChild(b); }
+    c.appendChild(h); return c;
+  }
+  const meter = (n, max) => { const m = el("span", "meter" + (n > max ? " warn" : ""), n + "/" + max); return m; };
+
+  function render(d) {
+    const tags = (d.tags || []).map(t => String(t).replace(/^#/, "").trim()).filter(Boolean);
+    const steps = d.scriptOutline || [];
+    const tagChars = tags.join(",").length;
+    out.replaceChildren();
+
+    const t = card("Title", meter((d.title || "").length, 100), d.title, "Title");
+    t.appendChild(el("p", "title", d.title)); out.appendChild(t);
+
+    const ds = card("Description", null, d.description, "Description");
+    ds.appendChild(el("p", "desc", d.description)); out.appendChild(ds);
+
+    const tg = card("Tags", meter(tagChars, 500), tags.join(", "), "All tags");
+    const wrap = el("div", "tags");
+    tags.forEach(x => { const b = el("button", "tag", "#" + x); b.type = "button"; b.title = "Copy tag"; b.onclick = () => copy(x, b, "#" + x); wrap.appendChild(b); });
+    tg.appendChild(wrap); out.appendChild(tg);
+
+    const sc = card("Script outline", null, steps.map((s, i) => (i + 1) + ". " + s).join("\n"), "Outline");
+    const ol = el("ol", "tl");
+    steps.forEach((s, i) => { const li = el("li", "", s); const n = el("i", "", i + 1); li.prepend(n); ol.appendChild(li); });
+    sc.appendChild(ol); out.appendChild(sc);
+
+    const all = el("button", "cp", "Copy everything"); all.type = "button"; all.style.justifySelf = "start";
+    all.onclick = () => copy([d.title, "", d.description, "", tags.map(x => "#" + x).join(" "), "", steps.map((s, i) => (i + 1) + ". " + s).join("\n")].join("\n"), all, "Full plan");
+    out.appendChild(all);
+  }
+
+  function skeleton() {
+    out.replaceChildren(...[0, 1, 2].map(() => { const c = el("div", "card"); c.append(el("div", "sk"), el("div", "sk"), el("div", "sk")); c.firstChild.style.width = "40%"; return c; }));
+  }
+  function error(msg) {
+    const s = el("div", "state err"); s.append(el("strong", "", "Couldn't generate your plan"), document.createTextNode(msg));
+    out.replaceChildren(s);
+  }
+  function busy(on) {
+    go.disabled = on; out.setAttribute("aria-busy", on);
+    $("goText").textContent = on ? "Generating…" : (last ? "Regenerate" : "Generate video plan");
+  }
+
+  async function submit() {
+    const value = topic.value.trim();
+    if (!value) { topic.focus(); toast("Enter a video topic first"); return; }
+    busy(true); skeleton();
+    try {
+      const ctrl = new AbortController(), to = setTimeout(() => ctrl.abort(), 45000);
+      const res = await fetch("/api/generateScript", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: value }), signal: ctrl.signal });
+      clearTimeout(to);
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json || !json.success || !json.data) throw new Error((json && (json.error || json.message)) || "The server returned an unexpected response. Try again.");
+      last = json.data; render(last); saveRecent(value);
+    } catch (e) {
+      error(e.name === "AbortError" ? "The request took too long. Check your connection and try again." : e.message || "Something went wrong. Try again.");
+    } finally { busy(false); }
+  }
+
+  $("form").addEventListener("submit", (e) => { e.preventDefault(); submit(); });
+  topic.addEventListener("input", count);
+  topic.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); submit(); } });
+  chips($("chips"), EXAMPLES); renderRecent(); count();
+})();
+</script>
+</body>
+</html>
