@@ -10,8 +10,8 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Serve static files from public directory if exists
-app.use(express.static(path.join(__dirname, "public")));
+// Serve static assets from netlify/public
+app.use(express.static(path.join(__dirname, "netlify", "public")));
 
 // Gemini Generation Handler with active model fallbacks
 const handleGeminiRequest = async (req, res) => {
@@ -32,7 +32,6 @@ const handleGeminiRequest = async (req, res) => {
 
     const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: title, description, tags (array), sceneByScenePrompts (array), and script. Output ONLY valid raw JSON without markdown blocks.`;
 
-    // Active active models list for v1beta
     const models = [
       "gemini-2.5-flash",
       "gemini-3.1-pro-preview"
@@ -95,8 +94,9 @@ app.post("/api/generateWithGemini", handleGeminiRequest);
 app.post("/api/generate", handleGeminiRequest);
 app.post("/api/generatePlan", handleGeminiRequest);
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+// Catch-all route to render netlify/public/index.html
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "netlify", "public", "index.html"));
 });
 
 app.listen(PORT, () => {
