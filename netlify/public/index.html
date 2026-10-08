@@ -209,7 +209,7 @@ textarea.field{resize:vertical;min-height:84px}
     busy(true); skeleton();
     try {
       const ctrl = new AbortController(), to = setTimeout(() => ctrl.abort(), 45000);
-      const res = await fetch("/api/generateScript", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: value }), signal: ctrl.signal });
+const res = await fetch("/api/generateWithGemini", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: value }), signal: ctrl.signal });
       clearTimeout(to);
       const json = await res.json().catch(() => null);
       if (!res.ok || !json || !json.success || !json.data) throw new Error((json && (json.error || json.message)) || "The server returned an unexpected response. Try again.");
