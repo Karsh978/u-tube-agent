@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "netlify", "public")));
 
-// Strategy Generator using Active Groq Models
+// Strategy Generator using Active Groq Models (2026 Updated)
 app.post("/api/generatePlan", async (req, res) => {
   try {
     const { topic } = req.body;
@@ -24,11 +24,11 @@ app.post("/api/generatePlan", async (req, res) => {
 
     const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: "title", "description", "tags" (array of strings), "sceneByScenePrompts" (array of strings), and "script" (string). Output ONLY valid raw JSON without markdown code blocks.`;
 
-    // Active Groq models list with fallback
+    // Active supported Groq models
     const groqModels = [
-      "llama3-70b-8192",
-      "llama3-8b-8192",
-      "mixtral-8x7b-32768"
+      "llama-3.1-8b-instant",
+      "llama-3.3-70b-versatile",
+      "llama-3.1-70b-versatile"
     ];
 
     let generatedText = null;
