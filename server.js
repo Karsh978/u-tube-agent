@@ -6,7 +6,7 @@ const app = express();
 
 app.use(express.json());
 
-// 1. API Isolated Router
+// 1. Isolated API Router (Prevents routing conflicts)
 const apiRouter = express.Router();
 
 apiRouter.get("/health", (req, res) => {
@@ -71,22 +71,22 @@ const handleGeminiRequest = async (req, res) => {
 apiRouter.post("/generateWithGemini", handleGeminiRequest);
 apiRouter.post("/generate", handleGeminiRequest);
 
-// Mount API routes
+// Mount API Router
 app.use("/api", apiRouter);
 
-// 2. Serve Static Frontend
+// 2. Serve Static Assets
 const publicPath = path.join(__dirname, "netlify", "public");
 app.use(express.static(publicPath));
 
-// 3. Express 5 / Node 24 Compatible Fallback Catch-All
-app.use((req, res, next) => {
+// 3. Express 5 Safe Catch-All (Replaces app.get("*") to prevent PathError)
+app.use((req, res) => {
   if (req.path.startsWith("/api")) {
     return res.status(404).json({ error: "API route not found" });
   }
-  
+
   res.sendFile(path.join(publicPath, "index.html"), (err) => {
     if (err) {
-      res.status(404).send("Index HTML file not found");
+      res.status(404).send("index.html not found");
     }
   });
 });
