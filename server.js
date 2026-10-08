@@ -4,19 +4,21 @@ const path = require("path");
 
 const app = express();
 
-// Enable JSON middleware
 app.use(express.json());
 
-// 1. Health Check Route (Must be before static middleware)
-app.get("/api/health", (req, res) => {
-  res.json({ 
+// Create an isolated router for API routes
+const apiRouter = express.Router();
+
+// 1. Health Check
+apiRouter.get("/health", (req, res) => {
+  return res.json({ 
     status: "OK", 
     hasApiKey: !!process.env.GEMINI_API_KEY,
     timestamp: new Date().toISOString()
   });
 });
 
-// 2. Gemini Generation Handler
+// 2. Main Gemini Generation Handler
 const handleGeminiRequest = async (req, res) => {
   try {
     const { topic } = req.body;
@@ -27,9 +29,9 @@ const handleGeminiRequest = async (req, res) => {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("GEMINI_API_KEY is missing in environment variables!");
+      console.error("GEMINI_API_KEY missing in Environment variables!");
       return res.status(500).json({ 
-        error: "GEMINI_API_KEY missing. Please add GEMINI_API_KEY in Render Environment settings." 
+        error: "GEMINI_API_KEY missing in Render environment variables." 
       });
     }
 
@@ -48,7 +50,7 @@ const handleGeminiRequest = async (req, res) => {
     const apiData = await response.json();
 
     if (!response.ok) {
-      console.error("Gemini API Error Response:", apiData);
+      console.error("Gemini API Error:", apiData);
       return res.status(response.status).json({ 
         error: apiData.error?.message || "Gemini API returned an error." 
       });
@@ -68,19 +70,28 @@ const handleGeminiRequest = async (req, res) => {
   }
 };
 
-// 3. API Endpoints
-app.post("/api/generateWithGemini", handleGeminiRequest);
-app.post("/api/generate", handleGeminiRequest);
+apiRouter.post("/generateWithGemini", handleGeminiRequest);
+apiRouter.post("/generate", handleGeminiRequest);
 
-// 4. Serve Static Files
-app.use(express.static(path.join(__dirname, "netlify", "public")));
+// Mount API router FIRST before any static directory
+app.use("/api", apiRouter);
 
-// Serve index.html for root path
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "netlify", "public", "index.html"));
+// Serve Static Frontend
+const publicPath = path.join(__dirname, "netlify", "public");
+app.use(express.static(publicPath));
+
+// Fallback to index.html for non-API GET requests
+app.get("*", (req, res) => {
+  if (req.path.startsWith("/api")) {
+    return res.status(404).json({ error: "API route not found" });
+  }
+  res.sendFile(path.join(publicPath, "index.html"), (err) => {
+    if (err) {
+      res.status(500).send("Index file not found at " + publicPath);
+    }
+  });
 });
 
-// 5. Port Listening Logic
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
