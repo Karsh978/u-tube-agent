@@ -36,27 +36,51 @@ const handleGeminiRequest = async (req, res) => {
 
     const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: title, description, tags (array), sceneByScenePrompts (array), and script. Output ONLY valid raw JSON without markdown blocks.`;
 
-    // Updated model to gemini-3.8-flash
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
+    // Fallback models list if high demand/overloaded
+    const models = [
+      "gemini-2.5-flash",
+      "gemini-2.5-pro",
+      "gemini-1.5-flash"
+    ];
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }] }]
-      })
-    });
+    let apiData = null;
+    let lastError = null;
 
-    const apiData = await response.json();
+    for (const model of models) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }]
+          })
+        });
 
-    if (!response.ok) {
-      console.error("Gemini API Error:", apiData);
-      return res.status(response.status).json({ 
-        error: apiData.error?.message || "Gemini API returned an error." 
+        const data = await response.json();
+
+        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          apiData = data;
+          console.log(`Successfully generated using model: ${model}`);
+          break; // Success, break loop
+        } else {
+          console.warn(`Model ${model} failed/overloaded:`, data.error?.message || "Invalid response");
+          lastError = data.error?.message || "Model request failed";
+        }
+      } catch (err) {
+        console.warn(`Fetch error on model ${model}:`, err.message);
+        lastError = err.message;
+      }
+    }
+
+    if (!apiData) {
+      return res.status(503).json({ 
+        error: lastError || "All Gemini models are currently experiencing high demand. Please try again in a few moments." 
       });
     }
 
-    let rawText = apiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    let rawText = apiData.candidates[0].content.parts[0].text;
     rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
 
     const data = JSON.parse(rawText);
