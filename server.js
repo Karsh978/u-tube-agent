@@ -94,8 +94,8 @@ app.post("/api/generateWithGemini", handleGeminiRequest);
 app.post("/api/generate", handleGeminiRequest);
 app.post("/api/generatePlan", handleGeminiRequest);
 
-// Fixed catch-all route syntax for Express v5 / path-to-regexp v8
-app.get("(.*)", (req, res) => {
+// Fallback Middleware to serve frontend index.html
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, "netlify", "public", "index.html"));
 });
 
