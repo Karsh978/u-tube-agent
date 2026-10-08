@@ -6,18 +6,24 @@ const { GoogleGenAI } = require("@google/genai");
 const app = express();
 app.use(express.json());
 
-// Fallback to prevent crash if key is missing on startup
-const apiKey = process.env.GEMINI_API_KEY || "DUMMY_KEY";
+// Initialize Gemini Client safely
+const apiKey = process.env.GEMINI_API_KEY || "";
 const ai = new GoogleGenAI({ apiKey });
 
 app.use(express.static(path.join(__dirname, "netlify", "public")));
 
-app.post("/api/generateWithGemini", async (req, res) => {
+const handleGeminiRequest = async (req, res) => {
   try {
     const { topic } = req.body;
-    
+
+    if (!topic) {
+      return res.status(400).json({ error: "Topic is required" });
+    }
+
     if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: "GEMINI_API_KEY is missing in environment variables." });
+      return res.status(500).json({ 
+        error: "GEMINI_API_KEY environment variable is missing in Render/Vercel settings." 
+      });
     }
 
     const response = await ai.models.generateContent({
@@ -26,22 +32,26 @@ app.post("/api/generateWithGemini", async (req, res) => {
       config: { responseMimeType: "application/json" }
     });
 
-    const data = JSON.parse(response.text);
-    res.json({ success: true, data });
+    const textResponse = response.text;
+    const data = JSON.parse(textResponse);
+    
+    return res.json({ success: true, data });
   } catch (error) {
-    console.error("Gemini Error:", error);
-    res.status(500).json({ error: error.message });
+    console.error("Gemini Route Error:", error);
+    return res.status(500).json({ 
+      error: error.message || "Failed to generate video strategy from Gemini API." 
+    });
   }
-});
+};
 
-// Dynamic PORT setup for Render / Vercel / Local
+// Supporting both endpoints so frontend won't break
+app.post("/api/generateWithGemini", handleGeminiRequest);
+app.post("/api/generate", handleGeminiRequest);
+
+// Dynamic PORT
 const PORT = process.env.PORT || 5000;
-
-// Listen on 0.0.0.0 so Render can route traffic
-if (process.env.NODE_ENV !== "production" || process.env.RENDER) {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-  });
-}
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
 
 module.exports = app;
