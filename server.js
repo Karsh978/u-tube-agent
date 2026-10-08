@@ -24,11 +24,10 @@ app.post("/api/generatePlan", async (req, res) => {
 
     const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: "title", "description", "tags" (array of strings), "sceneByScenePrompts" (array of strings), and "script" (string). Output ONLY valid raw JSON without markdown code blocks.`;
 
-    // Active supported Groq models
+    // Only 100% active operational Groq models
     const groqModels = [
-      "llama-3.1-8b-instant",
       "llama-3.3-70b-versatile",
-      "llama-3.1-70b-versatile"
+      "llama-3.1-8b-instant"
     ];
 
     let generatedText = null;
@@ -51,22 +50,23 @@ app.post("/api/generatePlan", async (req, res) => {
         });
 
         const data = await response.json();
+
         if (response.ok && data.choices?.[0]?.message?.content) {
           generatedText = data.choices[0].message.content;
-          console.log(`Successfully generated using Groq model: ${model}`);
+          console.log(`Successfully generated strategy using model: ${model}`);
           break;
         } else {
-          console.warn(`Groq model ${model} failed:`, data.error?.message || "Unknown error");
-          lastError = data.error?.message;
+          console.warn(`Groq model ${model} skipped:`, data.error?.message || "Model request failed");
+          lastError = data.error?.message || "Model request failed";
         }
       } catch (err) {
-        console.warn(`Fetch error on Groq model ${model}:`, err.message);
+        console.warn(`Fetch error on model ${model}:`, err.message);
         lastError = err.message;
       }
     }
 
     if (!generatedText) {
-      return res.status(503).json({ error: lastError || "Failed to generate strategy with Groq models." });
+      return res.status(503).json({ error: lastError || "Failed to generate plan. Please try again." });
     }
 
     let cleanedText = generatedText.trim();
