@@ -6,10 +6,9 @@ const app = express();
 
 app.use(express.json());
 
-// Create an isolated router for API routes
+// 1. API Isolated Router
 const apiRouter = express.Router();
 
-// 1. Health Check
 apiRouter.get("/health", (req, res) => {
   return res.json({ 
     status: "OK", 
@@ -18,7 +17,6 @@ apiRouter.get("/health", (req, res) => {
   });
 });
 
-// 2. Main Gemini Generation Handler
 const handleGeminiRequest = async (req, res) => {
   try {
     const { topic } = req.body;
@@ -29,7 +27,7 @@ const handleGeminiRequest = async (req, res) => {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("GEMINI_API_KEY missing in Environment variables!");
+      console.error("GEMINI_API_KEY missing in environment variables!");
       return res.status(500).json({ 
         error: "GEMINI_API_KEY missing in Render environment variables." 
       });
@@ -73,21 +71,22 @@ const handleGeminiRequest = async (req, res) => {
 apiRouter.post("/generateWithGemini", handleGeminiRequest);
 apiRouter.post("/generate", handleGeminiRequest);
 
-// Mount API router FIRST before any static directory
+// Mount API routes
 app.use("/api", apiRouter);
 
-// Serve Static Frontend
+// 2. Serve Static Frontend
 const publicPath = path.join(__dirname, "netlify", "public");
 app.use(express.static(publicPath));
 
-// Fallback to index.html for non-API GET requests
-app.get("*", (req, res) => {
+// 3. Express 5 / Node 24 Compatible Fallback Catch-All
+app.use((req, res, next) => {
   if (req.path.startsWith("/api")) {
     return res.status(404).json({ error: "API route not found" });
   }
+  
   res.sendFile(path.join(publicPath, "index.html"), (err) => {
     if (err) {
-      res.status(500).send("Index file not found at " + publicPath);
+      res.status(404).send("Index HTML file not found");
     }
   });
 });
