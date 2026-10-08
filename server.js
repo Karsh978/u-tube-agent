@@ -11,91 +11,88 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "netlify", "public")));
 
-// 1. Text & Strategy Generation Endpoint (Groq + Gemini Fallback)
+// Strategy Generator using Active Groq Models
 app.post("/api/generatePlan", async (req, res) => {
   try {
     const { topic } = req.body;
     if (!topic) return res.status(400).json({ error: "Topic is required" });
 
-    const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: "title", "description", "tags" (array), "scenePrompts" (array of short 1-sentence visual descriptions for video generation), and "script". Output ONLY valid raw JSON.`;
-
     const groqKey = process.env.GROQ_API_KEY;
     if (!groqKey) {
-      return res.status(500).json({ error: "GROQ_API_KEY is missing." });
+      return res.status(500).json({ error: "GROQ_API_KEY missing in environment variables." });
     }
 
-    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${groqKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [{ role: "user", content: promptText }],
-        response_format: { type: "json_object" }
-      })
-    });
+    const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: "title", "description", "tags" (array of strings), "sceneByScenePrompts" (array of strings), and "script" (string). Output ONLY valid raw JSON without markdown code blocks.`;
 
-    const groqData = await groqRes.json();
-    if (!groqRes.ok) throw new Error(groqData.error?.message || "Groq Error");
+    // Active Groq models list with fallback
+    const groqModels = [
+      "llama3-70b-8192",
+      "llama3-8b-8192",
+      "mixtral-8x7b-32768"
+    ];
 
-    const data = JSON.parse(groqData.choices[0].message.content);
+    let generatedText = null;
+    let lastError = null;
+
+    for (const model of groqModels) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${groqKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: "user", content: promptText }],
+            temperature: 0.7,
+            response_format: { type: "json_object" }
+          })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.choices?.[0]?.message?.content) {
+          generatedText = data.choices[0].message.content;
+          console.log(`Successfully generated using Groq model: ${model}`);
+          break;
+        } else {
+          console.warn(`Groq model ${model} failed:`, data.error?.message || "Unknown error");
+          lastError = data.error?.message;
+        }
+      } catch (err) {
+        console.warn(`Fetch error on Groq model ${model}:`, err.message);
+        lastError = err.message;
+      }
+    }
+
+    if (!generatedText) {
+      return res.status(503).json({ error: lastError || "Failed to generate strategy with Groq models." });
+    }
+
+    let cleanedText = generatedText.trim();
+    if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.replace(/^```(json)?/i, "").replace(/```\$/, "").trim();
+    }
+
+    const data = JSON.parse(cleanedText);
     return res.json({ success: true, data });
 
-  } catch (err) {
-    console.error("Strategy Error:", err.message);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/generateVideo", async (req, res) => {
-  try {
-    const { prompt } = req.body;
-    const hfToken = process.env.HF_TOKEN;
-
-    if (!hfToken) {
-      return res.status(500).json({ error: "HF_TOKEN missing in environment variables." });
-    }
-
-    // Hugging Face Router / Inference API call
-    const response = await fetch("https://router.huggingface.co/hf-inference/models/ZhengmingYu/DMAD", {
-      headers: {
-        Authorization: `Bearer ${hfToken}`,
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-      body: JSON.stringify({ inputs: prompt }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      return res.status(500).json({ error: `HuggingFace API Error: ${errorData}` });
-    }
-
-    // Generated video file buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Front-end ko MP4/Media format me return karna
-    res.setHeader("Content-Type", "video/mp4");
-    return res.send(buffer);
-
   } catch (error) {
-    console.error("Video Generation Error:", error);
-    return res.status(500).json({ error: error.message });
+    console.error("Server Error:", error);
+    return res.status(500).json({ error: error.message || "Failed to process request." });
   }
 });
 
-// Route Alias
+// Route Aliases
 app.post("/api/generateScript", (req, res) => res.redirect(307, "/api/generatePlan"));
 app.post("/api/generateWithGemini", (req, res) => res.redirect(307, "/api/generatePlan"));
+app.post("/api/generate", (req, res) => res.redirect(307, "/api/generatePlan"));
 
-// Static Frontend Catch-all
+// Safe Fallback Middleware for Static Frontend
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, "netlify", "public", "index.html"));
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
