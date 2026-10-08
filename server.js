@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "netlify", "public")));
 
-// Strategy Generator using Active Groq Models (2026 Updated)
+// Strategy Generator using Active Groq Models
 app.post("/api/generatePlan", async (req, res) => {
   try {
     const { topic } = req.body;
