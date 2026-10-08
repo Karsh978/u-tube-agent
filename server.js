@@ -94,8 +94,8 @@ app.post("/api/generateWithGemini", handleGeminiRequest);
 app.post("/api/generate", handleGeminiRequest);
 app.post("/api/generatePlan", handleGeminiRequest);
 
-// Catch-all route to render netlify/public/index.html
-app.get("*", (req, res) => {
+// Fixed catch-all route syntax for Express v5 / path-to-regexp v8
+app.get("(.*)", (req, res) => {
   res.sendFile(path.join(__dirname, "netlify", "public", "index.html"));
 });
 
