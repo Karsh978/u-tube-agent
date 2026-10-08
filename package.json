@@ -1,6 +1,7 @@
 {
   "name": "youtube-agentic-ai-studio",
   "version": "1.0.0",
+  "type": "module",
   "description": "Agentic AI studio for YouTube automation using free-tier APIs",
   "main": "public/index.html",
   "scripts": {
