@@ -36,8 +36,8 @@ const handleGeminiRequest = async (req, res) => {
 
     const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: title, description, tags (array), sceneByScenePrompts (array), and script. Output ONLY valid raw JSON without markdown blocks.`;
 
-    // Updated Gemini model URL for current v1beta endpoint
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    // Updated model to gemini-3.8-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: "POST",
