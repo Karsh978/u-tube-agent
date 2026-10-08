@@ -17,7 +17,6 @@ apiRouter.get("/health", (req, res) => {
   });
 });
 
-// Main Gemini Generation Handler
 const handleGeminiRequest = async (req, res) => {
   try {
     const { topic } = req.body;
@@ -36,11 +35,10 @@ const handleGeminiRequest = async (req, res) => {
 
     const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: title, description, tags (array), sceneByScenePrompts (array), and script. Output ONLY valid raw JSON without markdown blocks.`;
 
-    // Fallback models list if high demand/overloaded
+    // Only active supported models
     const models = [
       "gemini-2.5-flash",
-      "gemini-2.5-pro",
-      "gemini-1.5-flash"
+      "gemini-2.5-pro"
     ];
 
     let apiData = null;
@@ -63,7 +61,7 @@ const handleGeminiRequest = async (req, res) => {
         if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
           apiData = data;
           console.log(`Successfully generated using model: ${model}`);
-          break; // Success, break loop
+          break; // Success
         } else {
           console.warn(`Model ${model} failed/overloaded:`, data.error?.message || "Invalid response");
           lastError = data.error?.message || "Model request failed";
@@ -76,7 +74,7 @@ const handleGeminiRequest = async (req, res) => {
 
     if (!apiData) {
       return res.status(503).json({ 
-        error: lastError || "All Gemini models are currently experiencing high demand. Please try again in a few moments." 
+        error: lastError || "All Gemini models are currently busy. Please try again in a few moments." 
       });
     }
 
