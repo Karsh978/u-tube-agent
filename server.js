@@ -3,11 +3,20 @@ const express = require("express");
 const path = require("path");
 
 const app = express();
+
+// Enable JSON middleware
 app.use(express.json());
 
-// Serve static frontend files
-app.use(express.static(path.join(__dirname, "netlify", "public")));
+// 1. Health Check Route (Must be before static middleware)
+app.get("/api/health", (req, res) => {
+  res.json({ 
+    status: "OK", 
+    hasApiKey: !!process.env.GEMINI_API_KEY,
+    timestamp: new Date().toISOString()
+  });
+});
 
+// 2. Gemini Generation Handler
 const handleGeminiRequest = async (req, res) => {
   try {
     const { topic } = req.body;
@@ -24,9 +33,8 @@ const handleGeminiRequest = async (req, res) => {
       });
     }
 
-    const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: title, description, tags (array), sceneByScenePrompts (array), and script. Do not add markdown formatting or extra text. Output ONLY valid raw JSON.`;
+    const promptText = `You are an expert YouTube Creator. Generate a complete video strategy for topic: "${topic}". Return strict JSON with keys: title, description, tags (array), sceneByScenePrompts (array), and script. Output ONLY valid raw JSON without markdown blocks.`;
 
-    // Direct Gemini REST API Call (Reliable & No SDK version bugs)
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
@@ -46,10 +54,7 @@ const handleGeminiRequest = async (req, res) => {
       });
     }
 
-    // Extract text output from Gemini response
     let rawText = apiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    
-    // Clean up codeblock markers ```json ... ``` if model wraps them
     rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
 
     const data = JSON.parse(rawText);
@@ -63,15 +68,19 @@ const handleGeminiRequest = async (req, res) => {
   }
 };
 
-// Handle both API routes
+// 3. API Endpoints
 app.post("/api/generateWithGemini", handleGeminiRequest);
 app.post("/api/generate", handleGeminiRequest);
 
-// Health check endpoint to verify server status
-app.get("/api/health", (req, res) => {
-  res.json({ status: "OK", hasApiKey: !!process.env.GEMINI_API_KEY });
+// 4. Serve Static Files
+app.use(express.static(path.join(__dirname, "netlify", "public")));
+
+// Serve index.html for root path
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "netlify", "public", "index.html"));
 });
 
+// 5. Port Listening Logic
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
