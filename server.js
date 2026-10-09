@@ -1,11 +1,6 @@
+import "dotenv/config"; // loads .env locally; Vercel injects env vars itself
 import express from "express";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-
-// dotenv is only needed locally; Vercel injects env vars itself
-try { await import("dotenv/config"); } catch {}
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(express.json({ limit: "10kb" }));
@@ -17,10 +12,20 @@ const PROVIDERS = {
   gemini: { label: "Gemini", envKey: "GEMINI_API_KEY" },
 };
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(process.cwd(), "public")));
+
+// Quick check that the function boots. Open /api/health after deploying. Never exposes key values.
+app.get("/api/health", (req, res) => {
+  res.json({
+    ok: true,
+    node: process.version,
+    hasGroqKey: Boolean(process.env.GROQ_API_KEY),
+    hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+  });
+});
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(process.cwd(), "public", "index.html"));
 });
 
 /* ------------------------------------------------------------------ */
@@ -229,7 +234,7 @@ app.post("/api/generatePlan", generatePlan);
 app.post("/api/generateScript", generatePlan); // kept for older clients
 
 // Vercel runs the exported app as a function; only listen when run directly (node server.js)
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
     console.log(`\n🚀 Server running on http://localhost:${PORT}\n`);
