@@ -1,7 +1,11 @@
-require("dotenv").config();
-const express = require("express");
-const path = require("path");
-const Groq = require("groq-sdk");
+import express from "express";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+// dotenv is only needed locally; Vercel injects env vars itself
+try { await import("dotenv/config"); } catch {}
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(express.json({ limit: "10kb" }));
@@ -13,10 +17,10 @@ const PROVIDERS = {
   gemini: { label: "Gemini", envKey: "GEMINI_API_KEY" },
 };
 
-app.use(express.static(path.join(__dirname, "netlify", "public")));
+app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "netlify", "public", "index.html"));
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 /* ------------------------------------------------------------------ */
@@ -140,6 +144,7 @@ function normalize(data) {
 /* Provider calls: each returns the raw JSON text from the model       */
 /* ------------------------------------------------------------------ */
 async function callGroq({ system, user, apiKey }) {
+  const { default: Groq } = await import("groq-sdk"); // loaded lazily so a missing package is a handled error
   const client = new Groq({ apiKey });
   const completion = await client.chat.completions.create({
     messages: [
@@ -223,7 +228,12 @@ async function generatePlan(req, res) {
 app.post("/api/generatePlan", generatePlan);
 app.post("/api/generateScript", generatePlan); // kept for older clients
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`\n🚀 Server running with Groq on http://localhost:${PORT}\n`);
-});
+// Vercel runs the exported app as a function; only listen when run directly (node server.js)
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Server running on http://localhost:${PORT}\n`);
+  });
+}
+
+export default app;
