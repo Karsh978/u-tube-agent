@@ -22,8 +22,8 @@ app.post("/api/generatePlan", async (req, res) => {
     const selectedProvider = (provider || req.headers["x-provider"] || "groq").toLowerCase();
 
     // Determine API Key (Client dynamic key takes priority over Server env key)
-    const apiKey = customKey || req.headers["x-api-key"] || 
-                   (selectedProvider === "gemini" ? process.env.GEMINI_API_KEY : process.env.GROQ_API_KEY);
+    const apiKey = (customKey || req.headers["x-api-key"] || 
+                   (selectedProvider === "gemini" ? process.env.GEMINI_API_KEY : process.env.GROQ_API_KEY) || "").trim();
 
     if (!apiKey) {
       return res.status(400).json({ 
@@ -37,47 +37,40 @@ app.post("/api/generatePlan", async (req, res) => {
 
     // --- PROVIDER 1: GROQ CLOUD ---
     if (selectedProvider === "groq") {
-      const groqModels = model ? [model] : ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
-      let lastError = null;
+      // Direct Single Model Call to avoid deprecated model loops
+      const targetModel = model || "llama-3.3-70b-versatile";
 
-      for (const m of groqModels) {
-        try {
-          const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${apiKey.trim()}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              model: m,
-              messages: [{ role: "user", content: promptText }],
-              temperature: 0.7,
-              response_format: { type: "json_object" }
-            })
-          });
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: targetModel,
+            messages: [{ role: "user", content: promptText }],
+            temperature: 0.7,
+            response_format: { type: "json_object" }
+          })
+        });
 
-          const data = await response.json();
-          if (response.ok && data.choices?.[0]?.message?.content) {
-            generatedText = data.choices[0].message.content;
-            console.log(`[Groq Success] Model used: ${m}`);
-            break;
-          } else {
-            lastError = data.error?.message || "Groq Request Failed";
-          }
-        } catch (err) {
-          lastError = err.message;
+        const data = await response.json();
+        if (response.ok && data.choices?.[0]?.message?.content) {
+          generatedText = data.choices[0].message.content;
+          console.log(`[Groq Success] Model used: ${targetModel}`);
+        } else {
+          return res.status(502).json({ error: `Groq Error (${targetModel}): ${data.error?.message || "Model request failed"}` });
         }
-      }
-
-      if (!generatedText) {
-        return res.status(502).json({ error: `Groq Error: ${lastError}` });
+      } catch (err) {
+        return res.status(502).json({ error: `Groq Network Error: ${err.message}` });
       }
     } 
 
     // --- PROVIDER 2: GOOGLE GEMINI ---
     else if (selectedProvider === "gemini") {
       const targetModel = model || "gemini-1.5-flash";
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey.trim()}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
