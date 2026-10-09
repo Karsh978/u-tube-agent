@@ -52,6 +52,15 @@ textarea.field{resize:vertical;min-height:84px}
 .go[disabled] .spin{display:block}
 @keyframes r{to{transform:rotate(360deg)}}
 .hint{font-size:12.5px;color:var(--faint);margin-top:10px}
+.settings{margin-top:16px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.settings summary{padding:11px 14px;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between}
+.settings summary::-webkit-details-marker{display:none}
+.settings summary::after{content:"+";color:var(--muted)}
+.settings[open] summary::after{content:"\2212"}
+.sbody{padding:0 14px 14px}
+.settings .field{background:var(--bg)}
+.keyrow{display:flex;gap:8px}
+.opt{color:var(--faint);font-weight:400}
 .eg{margin-top:22px}
 .eg p{font-size:13px;color:var(--muted);margin-bottom:8px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -80,6 +89,10 @@ textarea.field{resize:vertical;min-height:84px}
 .tl i{position:absolute;left:0;top:-1px;width:28px;height:28px;border-radius:50%;background:var(--raised);border:2px solid var(--amber);display:grid;place-items:center;font:600 12px var(--body);font-style:normal;color:var(--amber)}
 .tl li:first-child i{background:var(--amber);color:#1a1405}
 
+.thumbs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.thumb{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:14px;aspect-ratio:16/9;display:flex;flex-direction:column;justify-content:space-between;gap:8px;min-height:130px}
+.tt{font:700 20px/1.1 var(--display);color:var(--amber)}
+.tv{font-size:13px;color:var(--muted)}
 .state{border:1px dashed var(--line);border-radius:14px;padding:44px 24px;text-align:center;color:var(--muted)}
 .state strong{display:block;color:var(--text);font:600 18px var(--display);margin-bottom:6px}
 .err{border-color:rgba(255,45,75,.5);background:rgba(255,45,75,.06)}
@@ -109,6 +122,22 @@ textarea.field{resize:vertical;min-height:84px}
       <label class="f" for="topic">Video topic</label>
       <textarea id="topic" class="field" maxlength="200" placeholder="e.g. MERN stack roadmap for 2026" required></textarea>
       <p class="hint"><span id="count">0</span>/200 · Press Ctrl + Enter to generate</p>
+      <details class="settings" id="settings">
+        <summary>AI provider &amp; API key</summary>
+        <div class="sbody">
+          <label class="f" for="provider">Provider</label>
+          <select id="provider" class="field">
+            <option value="groq">Groq Cloud (fast)</option>
+            <option value="gemini">Google Gemini</option>
+          </select>
+          <label class="f" for="customKey" style="margin-top:14px">Custom API key <span class="opt">(optional)</span></label>
+          <div class="keyrow">
+            <input id="customKey" class="field" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key here" />
+            <button type="button" class="cp" id="showKey" aria-pressed="false">Show</button>
+          </div>
+          <p class="hint">Leave blank to use the server's default key. Your key stays in this tab, is sent only with your request, and is never saved.</p>
+        </div>
+      </details>
       <button class="go" id="go" type="submit"><span class="spin" aria-hidden="true"></span><span id="goText">Generate video plan</span></button>
     </form>
 
@@ -186,8 +215,17 @@ textarea.field{resize:vertical;min-height:84px}
     steps.forEach((s, i) => { const li = el("li", "", s); const n = el("i", "", i + 1); li.prepend(n); ol.appendChild(li); });
     sc.appendChild(ol); out.appendChild(sc);
 
+    const thumbs = d.thumbnailIdeas || [];
+    const thumbText = thumbs.map((x, i) => (i + 1) + ". \"" + x.text + "\" - " + x.visual).join("\n");
+    if (thumbs.length) {
+      const th = card("Thumbnail ideas", null, thumbText, "Thumbnail ideas");
+      const g = el("div", "thumbs");
+      thumbs.forEach(x => { const b = el("div", "thumb"); b.append(el("p", "tt", x.text), el("p", "tv", x.visual)); g.appendChild(b); });
+      th.appendChild(g); out.appendChild(th);
+    }
+
     const all = el("button", "cp", "Copy everything"); all.type = "button"; all.style.justifySelf = "start";
-    all.onclick = () => copy([d.title, "", d.description, "", tags.map(x => "#" + x).join(" "), "", steps.map((s, i) => (i + 1) + ". " + s).join("\n")].join("\n"), all, "Full plan");
+    all.onclick = () => copy([d.title, "", d.description, "", tags.map(x => "#" + x).join(" "), "", steps.map((s, i) => (i + 1) + ". " + s).join("\n")].concat(thumbs.length ? ["", "Thumbnail ideas:", thumbText] : []).join("\n"), all, "Full plan");
     out.appendChild(all);
   }
 
@@ -209,7 +247,7 @@ textarea.field{resize:vertical;min-height:84px}
     busy(true); skeleton();
     try {
       const ctrl = new AbortController(), to = setTimeout(() => ctrl.abort(), 45000);
-const res = await fetch("/api/generateWithGemini", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: value }), signal: ctrl.signal });
+      const res = await fetch("/api/generatePlan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: value, provider: $("provider").value, customKey: $("customKey").value.trim() }), signal: ctrl.signal });
       clearTimeout(to);
       const json = await res.json().catch(() => null);
       if (!res.ok || !json || !json.success || !json.data) throw new Error((json && (json.error || json.message)) || "The server returned an unexpected response. Try again.");
@@ -222,6 +260,15 @@ const res = await fetch("/api/generateWithGemini", { method: "POST", headers: { 
   $("form").addEventListener("submit", (e) => { e.preventDefault(); submit(); });
   topic.addEventListener("input", count);
   topic.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); submit(); } });
+  const provider = $("provider"), keyInput = $("customKey");
+  try { const p = localStorage.getItem("yt-studio-provider"); if (p === "groq" || p === "gemini") provider.value = p; } catch {}
+  provider.addEventListener("change", () => { try { localStorage.setItem("yt-studio-provider", provider.value); } catch {} });
+  $("showKey").addEventListener("click", (e) => {
+    const show = keyInput.type === "password";
+    keyInput.type = show ? "text" : "password";
+    e.currentTarget.textContent = show ? "Hide" : "Show";
+    e.currentTarget.setAttribute("aria-pressed", String(show));
+  });
   chips($("chips"), EXAMPLES); renderRecent(); count();
 })();
 </script>
