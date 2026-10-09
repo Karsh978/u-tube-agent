@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>YouTube Agentic AI Studio</title>
-<meta name="description" content="Turn a video topic into a title, description, tags and script outline." />
+<title>YouTube Agentic AI Studio — Badger</title>
+<meta name="description" content="Topic se poora YouTube video blueprint + visual assets. AI-powered." />
 <meta name="theme-color" content="#151820" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦡</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -69,7 +69,7 @@ textarea.field{resize:vertical;min-height:84px}
 
 .out{display:grid;gap:16px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
-.head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.head{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .head h2{font:600 14px var(--body);color:var(--muted)}
 .meter{font-size:12.5px;color:var(--faint);margin-left:auto;font-variant-numeric:tabular-nums}
 .meter.warn{color:var(--amber)}
@@ -100,9 +100,39 @@ textarea.field{resize:vertical;min-height:84px}
 .sk{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--raised) 25%,#2c3342 50%,var(--raised) 75%);background-size:200% 100%;animation:sh 1.3s infinite;margin-top:10px}
 @keyframes sh{to{background-position:-200% 0}}
 
-.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,20px);background:var(--text);color:#151820;padding:9px 16px;border-radius:10px;font-weight:600;font-size:14px;opacity:0;pointer-events:none;transition:.2s}
+.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,20px);background:var(--text);color:#151820;padding:9px 16px;border-radius:10px;font-weight:600;font-size:14px;opacity:0;pointer-events:none;transition:.2s;z-index:99}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 .hidden{display:none!important}
+
+/* ============ Scene-by-Scene Visuals ============ */
+.media-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.media-controls label{font-size:13px;color:var(--muted);font-weight:600}
+.media-controls select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer}
+.media-btn{background:var(--amber);color:#1a1405;border:0;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:filter .15s}
+.media-btn:hover{filter:brightness(1.08)}
+.media-btn[disabled]{opacity:.6;cursor:progress}
+.media-btn .spin{border-color:rgba(26,20,5,.3);border-top-color:#1a1405;display:none}
+.media-btn[disabled] .spin{display:block}
+.media-btn.zip{background:var(--ok);color:#0a1f14}
+.media-btn.zip .spin{border-top-color:#0a1f14}
+
+.scenes{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:6px}
+.scene{background:var(--raised);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.scene .frame{aspect-ratio:16/9;background:linear-gradient(135deg,#1a1e28,#232835);display:grid;place-items:center;color:var(--faint);font-size:12.5px;position:relative;overflow:hidden}
+.scene .frame img,.scene .frame video{width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0}
+.scene .frame .badge{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.72);color:#fff;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;z-index:2}
+.scene .frame .badge.loading{background:rgba(244,183,64,.92);color:#1a1405}
+.scene .frame .placeholder{position:relative;z-index:1;text-align:center;padding:0 10px}
+.scene .body{padding:12px;display:flex;flex-direction:column;gap:8px;flex:1}
+.scene .prompt{font-size:12.5px;color:var(--muted);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:help}
+.scene .dur{font-size:11.5px;color:var(--faint)}
+.scene .actions{display:flex;gap:6px;margin-top:auto;flex-wrap:wrap}
+.scene .actions button,.scene .actions a{flex:1;min-width:60px;text-align:center;text-decoration:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer;color:var(--text);transition:.15s;font-weight:500}
+.scene .actions button:hover,.scene .actions a:hover{border-color:var(--amber);color:var(--amber)}
+.scene .actions a.disabled{opacity:.35;pointer-events:none}
+.media-note{font-size:12.5px;color:var(--faint);margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.media-note strong{color:var(--muted)}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -110,22 +140,22 @@ textarea.field{resize:vertical;min-height:84px}
 <header class="bar">
   <div class="logo" aria-hidden="true"></div>
   <b>Agentic AI Studio</b>
-  <span>for YouTube creators</span>
+  <span>🦡 Badger · for YouTube creators</span>
 </header>
 
 <main class="shell">
   <section class="brief" aria-labelledby="h">
-    <h1 id="h">Plan your next video in one pass</h1>
-    <p class="lede">Enter a topic and get a title, description, tags and a script outline you can copy straight into YouTube.</p>
+    <h1 id="h">Topic do, poora video package lo</h1>
+    <p class="lede">Title, description, tags, script outline aur scene-by-scene visuals — sab ek click me.</p>
 
     <form id="form" novalidate>
       <label class="f" for="topic">Video topic</label>
-      <textarea id="topic" class="field" maxlength="200" placeholder="e.g. MERN stack roadmap for 2026" required></textarea>
-      <p class="hint"><span id="count">0</span>/200 · Press Ctrl + Enter to generate</p>
+      <textarea id="topic" class="field" maxlength="200" placeholder="e.g. MERN stack roadmap 2026" required></textarea>
+      <p class="hint"><span id="count">0</span>/200 · Ctrl + Enter to generate</p>
       <details class="settings" id="settings">
         <summary>AI provider &amp; API key</summary>
         <div class="sbody">
-          <label class="f" for="provider">Provider</label>
+          <label class="f" for="provider">Provider (text)</label>
           <select id="provider" class="field">
             <option value="groq">Groq Cloud (fast)</option>
             <option value="gemini">Google Gemini</option>
@@ -135,7 +165,7 @@ textarea.field{resize:vertical;min-height:84px}
             <input id="customKey" class="field" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key here" />
             <button type="button" class="cp" id="showKey" aria-pressed="false">Show</button>
           </div>
-          <p class="hint">Leave blank to use the server's default key. Your key stays in this tab, is sent only with your request, and is never saved.</p>
+          <p class="hint">Leave blank to use server's default key. Never saved.</p>
         </div>
       </details>
       <button class="go" id="go" type="submit"><span class="spin" aria-hidden="true"></span><span id="goText">Generate video plan</span></button>
@@ -169,7 +199,7 @@ textarea.field{resize:vertical;min-height:84px}
   let last = null, toastTimer;
 
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-  const toast = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 1600); };
+  const toast = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 1800); };
 
   async function copy(text, btn, label) {
     try { await navigator.clipboard.writeText(text); }
@@ -184,18 +214,236 @@ textarea.field{resize:vertical;min-height:84px}
   function renderRecent() { const r = getRecent(); $("recentWrap").classList.toggle("hidden", !r.length); chips($("recent"), r); }
   const count = () => { $("count").textContent = topic.value.length; };
 
-  function card(title, meter, copyText, label) {
+  function card(title, meterEl, copyText, label) {
     const c = el("div", "card"), h = el("div", "head");
     h.appendChild(el("h2", "", title));
-    if (meter) h.appendChild(meter);
-    if (copyText) { const b = el("button", "cp", "Copy"); b.type = "button"; b.onclick = () => copy(copyText, b, label || title); if (!meter) b.style.marginLeft = "auto"; h.appendChild(b); }
+    if (meterEl) h.appendChild(meterEl);
+    if (copyText) { const b = el("button", "cp", "Copy"); b.type = "button"; b.onclick = () => copy(copyText, b, label || title); if (!meterEl) b.style.marginLeft = "auto"; h.appendChild(b); }
     c.appendChild(h); return c;
   }
-  const meter = (n, max) => { const m = el("span", "meter" + (n > max ? " warn" : ""), n + "/" + max); return m; };
+  const meter = (n, max) => el("span", "meter" + (n > max ? " warn" : ""), n + "/" + max);
 
+  /* ============================================================== */
+  /* SCENE-BY-SCENE VISUALS CARD (with Pollinations + HF + ZIP)      */
+  /* ============================================================== */
+  function scenesCard(scenes, fullPlan) {
+    if (!scenes || !scenes.length) return null;
+
+    const c = el("div", "card");
+    const h = el("div", "head");
+    h.appendChild(el("h2", "", "🎬 Scene-by-scene visuals"));
+    h.appendChild(el("span", "meter", scenes.length + " scenes"));
+    c.appendChild(h);
+
+    // -------- Controls --------
+    const controls = el("div", "media-controls");
+
+    const aspectLabel = el("label", "", "Aspect:");
+    aspectLabel.setAttribute("for", "aspectSel");
+    const aspectSel = el("select"); aspectSel.id = "aspectSel";
+    [["16:9","16:9 · YouTube"],["9:16","9:16 · Shorts/Reels"],["1:1","1:1 · Instagram"]].forEach(([v,label]) => {
+      const o = el("option", "", label); o.value = v; aspectSel.appendChild(o);
+    });
+
+    const engineLabel = el("label", "", "Engine:");
+    engineLabel.setAttribute("for", "engineSel");
+    const engineSel = el("select"); engineSel.id = "engineSel";
+    [
+      ["pollinations", "🎨 Image · Pollinations (free)"],
+      ["huggingface", "🎥 Video · HuggingFace"],
+    ].forEach(([v, label]) => {
+      const o = el("option", "", label); o.value = v; engineSel.appendChild(o);
+    });
+
+    const genBtn = el("button", "media-btn");
+    genBtn.type = "button";
+    const genSpin = el("span", "spin"); genBtn.appendChild(genSpin);
+    genBtn.appendChild(document.createTextNode("Generate visuals"));
+
+    const zipBtn = el("button", "media-btn zip");
+    zipBtn.type = "button";
+    const zipSpin = el("span", "spin"); zipBtn.appendChild(zipSpin);
+    zipBtn.appendChild(document.createTextNode("Download ZIP"));
+
+    controls.append(aspectLabel, aspectSel, engineLabel, engineSel, genBtn, zipBtn);
+    c.appendChild(controls);
+
+    // -------- Scenes grid --------
+    const grid = el("div", "scenes");
+    scenes.forEach((s, i) => {
+      const sc = el("div", "scene");
+      sc.dataset.index = String(i);
+
+      const frame = el("div", "frame");
+      frame.appendChild(el("span", "badge", s.scene || ("Scene " + (i + 1))));
+      frame.appendChild(el("span", "placeholder", "Not generated yet"));
+
+      const body = el("div", "body");
+      const p = el("p", "prompt", s.prompt); p.title = s.prompt;
+      const d = el("p", "dur", "⏱ " + (s.duration || 8) + "s");
+      body.append(p, d);
+
+      const actions = el("div", "actions");
+      const openA = el("a", "disabled", "Open");
+      openA.target = "_blank"; openA.rel = "noopener";
+      const dlA = el("a", "disabled", "⬇ Save");
+      dlA.target = "_blank"; dlA.rel = "noopener";
+      dlA.setAttribute("download", (s.scene || "scene-" + (i + 1)).replace(/[:.]/g, "-"));
+      const retryBtn = el("button", "", "🔄 Retry");
+      retryBtn.type = "button";
+      retryBtn.title = "Regenerate this scene";
+      actions.append(openA, dlA, retryBtn);
+      body.appendChild(actions);
+
+      sc.append(frame, body);
+      grid.appendChild(sc);
+    });
+    c.appendChild(grid);
+
+    const note = el("p", "media-note");
+    note.innerHTML = "<strong>Tip:</strong> Pollinations images = 3–10 sec each (free). HuggingFace videos = 30–90 sec each (needs HF_API_KEY).";
+    c.appendChild(note);
+
+    // -------- Helper: set frame content --------
+    function setFrame(sceneEl, asset, cacheBust) {
+      const f = sceneEl.querySelector(".frame");
+      f.querySelectorAll("img, video, .placeholder").forEach(n => n.remove());
+      const badge = f.querySelector(".badge");
+      badge.classList.remove("loading");
+
+      if (asset.type === "video") {
+        const v = el("video");
+        v.controls = true; v.muted = true; v.loop = true; v.playsInline = true;
+        v.src = cacheBust ? asset.url + (asset.url.includes("?") ? "&" : "?") + "r=" + Date.now() : asset.url;
+        f.appendChild(v);
+      } else {
+        const img = el("img");
+        img.alt = asset.scene || "scene visual";
+        img.loading = "lazy";
+        img.referrerPolicy = "no-referrer";
+        img.src = cacheBust ? asset.url + "&r=" + Date.now() : asset.url;
+        f.appendChild(img);
+      }
+
+      const [openA, dlA] = sceneEl.querySelectorAll(".actions a");
+      openA.classList.remove("disabled"); openA.href = asset.url;
+      dlA.classList.remove("disabled"); dlA.href = asset.url;
+    }
+
+    function setLoading(sceneEl, txt) {
+      const f = sceneEl.querySelector(".frame");
+      f.querySelectorAll("img, video").forEach(n => n.remove());
+      const badge = f.querySelector(".badge");
+      badge.classList.add("loading");
+      let ph = f.querySelector(".placeholder");
+      if (!ph) { ph = el("span", "placeholder"); f.appendChild(ph); }
+      ph.textContent = txt || "Generating…";
+    }
+
+    // -------- Generate all --------
+    genBtn.addEventListener("click", async () => {
+      genBtn.disabled = true;
+      const engine = engineSel.value;
+      const aspect = aspectSel.value;
+      grid.querySelectorAll(".scene").forEach(sc => setLoading(sc, "Generating…"));
+
+      try {
+        const res = await fetch("/api/generateMedia", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompts: scenes.map(s => ({ scene: s.scene, prompt: s.prompt })),
+            aspect,
+            engine,
+          }),
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json || !json.success) {
+          throw new Error((json && json.error) || "Media generation failed");
+        }
+        json.assets.forEach((asset, i) => {
+          const sc = grid.querySelector('.scene[data-index="' + i + '"]');
+          if (sc) setFrame(sc, asset, false);
+        });
+        toast("Generated " + json.assets.length + " " + (engine === "huggingface" ? "videos" : "images") + " ✓");
+      } catch (e) {
+        toast(e.message || "Media generation failed");
+        grid.querySelectorAll(".scene").forEach(sc => setLoading(sc, "Failed — retry"));
+      } finally {
+        genBtn.disabled = false;
+      }
+    });
+
+    // -------- ZIP download --------
+    zipBtn.addEventListener("click", async () => {
+      zipBtn.disabled = true;
+      try {
+        const res = await fetch("/api/downloadZip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan: fullPlan, aspect: aspectSel.value }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || "ZIP creation failed");
+        }
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        const safe = (fullPlan.title || "video-plan").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase();
+        a.download = safe + ".zip";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        toast("ZIP downloaded ✓");
+      } catch (e) {
+        toast(e.message || "ZIP failed");
+      } finally {
+        zipBtn.disabled = false;
+      }
+    });
+
+    // -------- Per-scene Retry --------
+    grid.querySelectorAll(".scene").forEach(sc => {
+      const idx = Number(sc.dataset.index);
+      const retryBtn = sc.querySelector(".actions button");
+      retryBtn.addEventListener("click", async () => {
+        retryBtn.disabled = true;
+        const aspect = aspectSel.value;
+        const engine = engineSel.value;
+        setLoading(sc, "Regenerating…");
+        try {
+          const res = await fetch("/api/generateMedia", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompts: [{ scene: scenes[idx].scene, prompt: scenes[idx].prompt }],
+              aspect, engine,
+            }),
+          });
+          const json = await res.json();
+          if (!res.ok || !json.success) throw new Error((json && json.error) || "Retry failed");
+          setFrame(sc, json.assets[0], true);
+          toast("Scene " + (idx + 1) + " regenerated ✓");
+        } catch (e) {
+          toast(e.message || "Retry failed");
+          setLoading(sc, "Retry failed");
+        } finally {
+          retryBtn.disabled = false;
+        }
+      });
+    });
+
+    return c;
+  }
+
+  /* ============================================================== */
+  /* RENDER                                                          */
+  /* ============================================================== */
   function render(d) {
     const tags = (d.tags || []).map(t => String(t).replace(/^#/, "").trim()).filter(Boolean);
     const steps = d.scriptOutline || [];
+    const thumbs = d.thumbnailIdeas || [];
+    const scenes = d.sceneByScenePrompts || [];
     const tagChars = tags.join(",").length;
     out.replaceChildren();
 
@@ -215,7 +463,6 @@ textarea.field{resize:vertical;min-height:84px}
     steps.forEach((s, i) => { const li = el("li", "", s); const n = el("i", "", i + 1); li.prepend(n); ol.appendChild(li); });
     sc.appendChild(ol); out.appendChild(sc);
 
-    const thumbs = d.thumbnailIdeas || [];
     const thumbText = thumbs.map((x, i) => (i + 1) + ". \"" + x.text + "\" - " + x.visual).join("\n");
     if (thumbs.length) {
       const th = card("Thumbnail ideas", null, thumbText, "Thumbnail ideas");
@@ -224,8 +471,21 @@ textarea.field{resize:vertical;min-height:84px}
       th.appendChild(g); out.appendChild(th);
     }
 
+    // Scene-by-scene visuals
+    const scenesEl = scenesCard(scenes, d);
+    if (scenesEl) out.appendChild(scenesEl);
+
+    // Copy everything
     const all = el("button", "cp", "Copy everything"); all.type = "button"; all.style.justifySelf = "start";
-    all.onclick = () => copy([d.title, "", d.description, "", tags.map(x => "#" + x).join(" "), "", steps.map((s, i) => (i + 1) + ". " + s).join("\n")].concat(thumbs.length ? ["", "Thumbnail ideas:", thumbText] : []).join("\n"), all, "Full plan");
+    all.onclick = () => copy([
+      d.title, "", d.description, "",
+      tags.map(x => "#" + x).join(" "), "",
+      steps.map((s, i) => (i + 1) + ". " + s).join("\n")
+    ].concat(
+      thumbs.length ? ["", "Thumbnail ideas:", thumbText] : [],
+      scenes.length ? ["", "Scene-by-scene prompts:"] : [],
+      scenes.map((s, i) => (i + 1) + ". [" + s.scene + "] " + s.prompt + " (" + (s.duration || 8) + "s)")
+    ).join("\n"), all, "Full plan");
     out.appendChild(all);
   }
 
@@ -246,14 +506,21 @@ textarea.field{resize:vertical;min-height:84px}
     if (!value) { topic.focus(); toast("Enter a video topic first"); return; }
     busy(true); skeleton();
     try {
-      const ctrl = new AbortController(), to = setTimeout(() => ctrl.abort(), 45000);
-      const res = await fetch("/api/generatePlan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: value, provider: $("provider").value, customKey: $("customKey").value.trim() }), signal: ctrl.signal });
+      const ctrl = new AbortController(), to = setTimeout(() => ctrl.abort(), 90000);
+      const res = await fetch("/api/generatePlan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: value, provider: $("provider").value, customKey: $("customKey").value.trim() }),
+        signal: ctrl.signal,
+      });
       clearTimeout(to);
       const json = await res.json().catch(() => null);
-      if (!res.ok || !json || !json.success || !json.data) throw new Error((json && (json.error || json.message)) || "The server returned an unexpected response. Try again.");
+      if (!res.ok || !json || !json.success || !json.data) {
+        throw new Error((json && (json.error || json.message)) || "Server returned unexpected response.");
+      }
       last = json.data; render(last); saveRecent(value);
     } catch (e) {
-      error(e.name === "AbortError" ? "The request took too long. Check your connection and try again." : e.message || "Something went wrong. Try again.");
+      error(e.name === "AbortError" ? "Request timed out. Try again." : e.message || "Something went wrong.");
     } finally { busy(false); }
   }
 
