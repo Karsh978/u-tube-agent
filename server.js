@@ -1,13 +1,22 @@
-import "dotenv/config"; // loads .env locally; Vercel injects env vars itself
+import "dotenv/config";
 import express from "express";
 import path from "node:path";
 import { createRequire } from "node:module";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import os from "node:os";
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 
 const require = createRequire(import.meta.url);
 const archiverModule = require("archiver");
-const archiver = archiverModule.default || archiverModule;   // ✅ dono cases handle
+const archiver = archiverModule.default || archiverModule;
+
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+console.log("🎬 FFmpeg binary:", ffmpegInstaller.path);
+
 const app = express();
-app.use(express.json({ limit: "10kb" }));
+app.use(express.json({ limit: "5mb" }));
 
 const GROQ_MODEL = process.env.GROQ_MODEL || "qwen/qwen3.8-27b";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -18,9 +27,7 @@ const PROVIDERS = {
 
 app.use(express.static(path.join(process.cwd(), "public")));
 
-/* ------------------------------------------------------------------ */
-/* Health check                                                        */
-/* ------------------------------------------------------------------ */
+/* Health */
 app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
@@ -28,6 +35,7 @@ app.get("/api/health", (req, res) => {
     hasGroqKey: Boolean(process.env.GROQ_API_KEY),
     hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
     hasHFKey: Boolean(process.env.HF_API_KEY),
+    ffmpegPath: ffmpegInstaller.path,
   });
 });
 
@@ -35,9 +43,7 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(process.cwd(), "public", "index.html"));
 });
 
-/* ------------------------------------------------------------------ */
-/* Prompt builder                                                      */
-/* ------------------------------------------------------------------ */
+/* -------------------- Prompt builder -------------------- */
 function buildPrompts(topic) {
   const now = new Date();
   const today = now.toLocaleDateString("en-US", {
@@ -83,9 +89,9 @@ SCENE-BY-SCENE VISUAL PROMPTS
 - Match each scriptOutline section with ONE visual prompt.
 - Each prompt must be a cinematic English sentence usable by a text-to-image / text-to-video model.
 - Format: "A [shot type] of [subject] in [setting], [lighting], [mood], [style]"
-- Example: "A cinematic close-up shot of a futuristic AI laboratory, neon blue lighting, moody atmosphere, ultra-realistic 8k"
-- "scene" must match the timestamp from scriptOutline (e.g. "0:00").
-- "duration" must be a number of seconds (between 5 and 15).
+- "scene" must match the timestamp from scriptOutline.
+- "duration" must be a number of seconds between 5 and 15.
+- ALSO return a short "caption" per scene: max 6 words, suitable for on-screen text overlay.
 
 Return ONLY this JSON structure:
 {
@@ -97,16 +103,14 @@ Return ONLY this JSON structure:
     { "text": "string", "visual": "string" }
   ],
   "sceneByScenePrompts": [
-    { "scene": "string", "prompt": "string", "duration": 8 }
+    { "scene": "string", "prompt": "string", "duration": 8, "caption": "string" }
   ]
 }`;
 
   return { system, user };
 }
 
-/* ------------------------------------------------------------------ */
-/* Parse & normalize                                                   */
-/* ------------------------------------------------------------------ */
+/* -------------------- Parse & normalize -------------------- */
 function parseModelJson(raw) {
   if (!raw) throw new Error("Empty response from model");
   const cleaned = raw.replace(/```(?:json)?/gi, "").trim();
@@ -151,6 +155,7 @@ function normalize(data) {
     .map((s) => ({
       scene: str(s && s.scene),
       prompt: str(s && s.prompt),
+      caption: str(s && s.caption),
       duration: Number.isFinite(s && s.duration) ? Number(s.duration) : 8,
     }))
     .filter((s) => s.prompt);
@@ -172,9 +177,7 @@ function normalize(data) {
   return result;
 }
 
-/* ------------------------------------------------------------------ */
-/* Provider calls                                                      */
-/* ------------------------------------------------------------------ */
+/* -------------------- Provider calls -------------------- */
 async function callGroq({ system, user, apiKey }) {
   const { default: Groq } = await import("groq-sdk");
   const client = new Groq({ apiKey });
@@ -213,9 +216,7 @@ async function callGemini({ system, user, apiKey }) {
 
 const CALLERS = { groq: callGroq, gemini: callGemini };
 
-/* ------------------------------------------------------------------ */
-/* /api/generatePlan                                                   */
-/* ------------------------------------------------------------------ */
+/* -------------------- /api/generatePlan -------------------- */
 async function generatePlan(req, res) {
   try {
     const body = req.body || {};
@@ -227,7 +228,7 @@ async function generatePlan(req, res) {
 
     const provider = typeof body.provider === "string" ? body.provider.toLowerCase() : "groq";
     if (!PROVIDERS[provider]) {
-      return res.status(400).json({ error: "Unsupported provider. Use 'groq' or 'gemini'." });
+      return res.status(400).json({ error: "Unsupported provider." });
     }
 
     const customKey = typeof body.customKey === "string" ? body.customKey.trim() : "";
@@ -237,7 +238,7 @@ async function generatePlan(req, res) {
     const apiKey = customKey || process.env[envKey];
     if (!apiKey) {
       return res.status(400).json({
-        error: `No ${label} API key found. Paste one in the settings panel or set ${envKey} on the server.`,
+        error: `No ${label} API key found.`,
       });
     }
 
@@ -248,7 +249,6 @@ async function generatePlan(req, res) {
     res.json({ success: true, provider, data });
   } catch (error) {
     console.error("Generation error:", error.message);
-
     const msg = error.message || "Failed to generate content";
     const badKey =
       error.status === 401 ||
@@ -256,7 +256,7 @@ async function generatePlan(req, res) {
       /api key (not valid|is invalid)|invalid api key/i.test(msg);
     const status = badKey ? 401 : error.status === 429 ? 429 : 500;
     res.status(status).json({
-      error: badKey ? "The API key was rejected by the provider. Check it and try again." : msg,
+      error: badKey ? "The API key was rejected." : msg,
     });
   }
 }
@@ -264,42 +264,31 @@ async function generatePlan(req, res) {
 app.post("/api/generatePlan", generatePlan);
 app.post("/api/generateScript", generatePlan);
 
-/* ------------------------------------------------------------------ */
-/* Media helpers                                                       */
-/* ------------------------------------------------------------------ */
-function buildPollinationsImageUrl(prompt, { width = 1280, height = 720, seed, model = "flux" } = {}) {
-  const encoded = encodeURIComponent(prompt);
-  const params = new URLSearchParams({
-    width: String(width),
-    height: String(height),
-    model,
-    nologo: "true",
-  });
-  if (seed) params.set("seed", String(seed));
-  return `https://image.pollinations.ai/prompt/${encoded}?${params.toString()}`;
+/* -------------------- MEDIA HELPERS -------------------- */
+function buildPicsumUrl(seed, width, height) {
+  return `https://picsum.photos/seed/${seed}/${width}/${height}`;
 }
 
-async function hfTextToVideo({ prompt, apiKey, model }) {
-  const res = await fetch(
-    `https://api-inference.huggingface.co/models/${encodeURIComponent(model)}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "video/mp4",
-      },
-      body: JSON.stringify({ inputs: prompt }),
-    }
-  );
+async function hfTextToImage({ prompt, apiKey, model = "black-forest-labs/FLUX.1-schnell" }) {
+  const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      inputs: prompt,
+      parameters: { width: 1280, height: 720 },
+    }),
+  });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    const err = new Error(`HuggingFace failed (${res.status}): ${txt.slice(0, 200)}`);
+    const err = new Error(`HF image failed (${res.status}): ${txt.slice(0, 150)}`);
     err.status = res.status;
     throw err;
   }
   const buf = Buffer.from(await res.arrayBuffer());
-  return `data:video/mp4;base64,${buf.toString("base64")}`;
+  return `data:image/jpeg;base64,${buf.toString("base64")}`;
 }
 
 function aspectDims(aspect) {
@@ -308,12 +297,10 @@ function aspectDims(aspect) {
   return { width: 1280, height: 720 };
 }
 
-/* ------------------------------------------------------------------ */
-/* /api/generateMedia — Pollinations (images) OR HuggingFace (videos)  */
-/* ------------------------------------------------------------------ */
+/* -------------------- /api/generateMedia -------------------- */
 app.post("/api/generateMedia", async (req, res) => {
   try {
-    const { prompts, aspect = "16:9", engine = "pollinations" } = req.body || {};
+    const { prompts, aspect = "16:9", engine = "auto" } = req.body || {};
 
     if (!Array.isArray(prompts) || prompts.length === 0) {
       return res.status(400).json({ error: "prompts[] is required" });
@@ -323,55 +310,39 @@ app.post("/api/generateMedia", async (req, res) => {
     }
 
     const dims = aspectDims(aspect);
+    const hfKey = process.env.HF_API_KEY;
     const assets = [];
 
-    if (engine === "huggingface") {
-      const apiKey =
-        (typeof req.body.hfKey === "string" && req.body.hfKey.trim()) ||
-        process.env.HF_API_KEY;
-      if (!apiKey) {
-        return res.status(400).json({
-          error: "HF_API_KEY missing. Set it in .env or paste in settings.",
-        });
-      }
-      const model = process.env.HF_VIDEO_MODEL || "damo-vilab/text-to-video-ms-1.7b";
+    for (let i = 0; i < prompts.length; i++) {
+      const item = prompts[i];
+      const prompt = typeof item === "string" ? item : item.prompt;
+      const scene = typeof item === "object" && item.scene ? item.scene : `Scene ${i + 1}`;
+      const caption = typeof item === "object" && item.caption ? item.caption : "";
+      if (!prompt) continue;
 
-      // Videos are slow; cap at 6 per request
-      const limited = prompts.slice(0, 6);
-      for (let i = 0; i < limited.length; i++) {
-        const item = limited[i];
-        const prompt = typeof item === "string" ? item : item.prompt;
-        const scene = typeof item === "object" && item.scene ? item.scene : `Scene ${i + 1}`;
-        if (!prompt) continue;
+      let imageUrl = null;
+      let source = "picsum";
+
+      if (hfKey && (engine === "auto" || engine === "huggingface")) {
         try {
-          const url = await hfTextToVideo({ prompt, apiKey, model });
-          assets.push({ scene, prompt, type: "video", url });
+          console.log(`[MEDIA] HF image ${i + 1}/${prompts.length}...`);
+          imageUrl = await hfTextToImage({ prompt, apiKey: hfKey });
+          source = "huggingface";
+          console.log(`[MEDIA] HF ✓ scene ${i + 1}`);
         } catch (e) {
-          console.warn("HF scene failed:", scene, e.message);
-          // fall back to Pollinations image for this scene
-          assets.push({
-            scene,
-            prompt,
-            type: "image",
-            url: buildPollinationsImageUrl(prompt, { ...dims, seed: 1000 + i }),
-            fallback: true,
-          });
+          console.warn(`[MEDIA] HF failed scene ${i + 1}:`, e.message);
         }
       }
-    } else {
-      // pollinations (default)
-      for (let i = 0; i < prompts.length; i++) {
-        const item = prompts[i];
-        const prompt = typeof item === "string" ? item : item.prompt;
-        const scene = typeof item === "object" && item.scene ? item.scene : `Scene ${i + 1}`;
-        if (!prompt) continue;
-        assets.push({
-          scene,
-          prompt,
-          type: "image",
-          url: buildPollinationsImageUrl(prompt, { ...dims, seed: 1000 + i }),
-        });
+
+      if (!imageUrl) {
+        const randomSeed = Math.floor(Math.random() * 1000000);
+        imageUrl = buildPicsumUrl(randomSeed, dims.width, dims.height);
+        source = "picsum";
       }
+
+      assets.push({ scene, prompt, caption, type: "image", url: imageUrl, source });
+
+      if (source === "huggingface") await new Promise((r) => setTimeout(r, 1000));
     }
 
     res.json({ success: true, engine, count: assets.length, assets });
@@ -381,10 +352,9 @@ app.post("/api/generateMedia", async (req, res) => {
   }
 });
 
-/* ------------------------------------------------------------------ */
-/* /api/downloadZip — bundles images + script + metadata               */
-/* ------------------------------------------------------------------ */
+/* -------------------- /api/downloadZip -------------------- */
 app.post("/api/downloadZip", async (req, res) => {
+  console.log("[ZIP] Request received");
   try {
     const { plan, aspect = "16:9" } = req.body || {};
     if (!plan || typeof plan !== "object") {
@@ -397,10 +367,8 @@ app.post("/api/downloadZip", async (req, res) => {
       return res.status(400).json({ error: "No scenes in plan" });
     }
 
-    // ---- FIXED: single, clean slug for the whole ZIP ----
-    const zipBase = (typeof plan.title === "string" && plan.title.trim()
-      ? plan.title
-      : "badger-plan"
+    const zipBase = (
+      typeof plan.title === "string" && plan.title.trim() ? plan.title : "badger-plan"
     )
       .replace(/[^a-z0-9-_]+/gi, "-")
       .replace(/^-+|-+$/g, "")
@@ -408,27 +376,18 @@ app.post("/api/downloadZip", async (req, res) => {
       .toLowerCase() || "badger-plan";
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${zipBase}.zip"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${zipBase}.zip"`);
 
     const archive = archiver("zip", { zlib: { level: 9 } });
-
     archive.on("error", (err) => {
-      console.error("Zip error:", err.message);
+      console.error("[ZIP] error:", err.message);
       if (!res.headersSent) res.status(500).end();
+      else res.end();
     });
-    archive.on("warning", (err) => {
-      console.warn("Zip warning:", err.message);
-    });
-
     archive.pipe(res);
 
-    // 1. Metadata JSON
     archive.append(JSON.stringify(plan, null, 2), { name: "plan.json" });
 
-    // 2. Script as text
     const scriptTxt = [
       `TITLE: ${plan.title || ""}`,
       "",
@@ -445,30 +404,52 @@ app.post("/api/downloadZip", async (req, res) => {
     ].join("\n");
     archive.append(scriptTxt, { name: "script.txt" });
 
-    // 3. Fetch each image and add
-    let imgCount = 0;
-    for (let i = 0; i < scenes.length; i++) {
-      const s = scenes[i];
-      if (!s.prompt) continue;
-      const url = buildPollinationsImageUrl(s.prompt, { ...dims, seed: 1000 + i });
-      try {
-        const r = await fetch(url);
-        if (!r.ok) {
-          console.warn("Image fetch failed:", s.scene, r.status);
-          continue;
+    const results = await Promise.all(
+      scenes.map(async (s, i) => {
+        if (!s.prompt) return null;
+        const hfKey = process.env.HF_API_KEY;
+        let imageBuf = null;
+        let ext = "jpg";
+
+        if (hfKey) {
+          try {
+            const url = await hfTextToImage({ prompt: s.prompt, apiKey: hfKey });
+            // data URL → buffer
+            const b64 = url.split(",")[1];
+            imageBuf = Buffer.from(b64, "base64");
+          } catch (e) {
+            console.warn("[ZIP] HF failed, using Picsum:", e.message);
+          }
         }
-        const buf = Buffer.from(await r.arrayBuffer());
 
-        // ---- FIXED: safe per-scene filename ----
-        const sceneTag = String(s.scene || `scene-${i + 1}`)
-          .replace(/[^a-z0-9-_]+/gi, "-")
-          .replace(/^-+|-+$/g, "") || `scene-${i + 1}`;
-        const fname = `scenes/${String(i + 1).padStart(2, "0")}-${sceneTag}.jpg`;
+        if (!imageBuf) {
+          const seed = Math.floor(Math.random() * 1000000);
+          try {
+            const r = await fetch(buildPicsumUrl(seed, dims.width, dims.height), {
+              signal: AbortSignal.timeout(60000),
+            });
+            if (r.ok) imageBuf = Buffer.from(await r.arrayBuffer());
+          } catch (e) {
+            console.warn("[ZIP] Picsum fetch failed:", e.message);
+          }
+        }
 
-        archive.append(buf, { name: fname });
+        if (!imageBuf) return null;
+
+        const sceneTag =
+          String(s.scene || `scene-${i + 1}`)
+            .replace(/[^a-z0-9-_]+/gi, "-")
+            .replace(/^-+|-+$/g, "") || `scene-${i + 1}`;
+        const fname = `scenes/${String(i + 1).padStart(2, "0")}-${sceneTag}.${ext}`;
+        return { fname, buf: imageBuf };
+      })
+    );
+
+    let imgCount = 0;
+    for (const r of results) {
+      if (r) {
+        archive.append(r.buf, { name: r.fname });
         imgCount++;
-      } catch (e) {
-        console.warn("Scene fetch failed:", s.scene, e.message);
       }
     }
 
@@ -479,25 +460,232 @@ app.post("/api/downloadZip", async (req, res) => {
         `Title: ${plan.title || ""}`,
         `Scenes: ${scenes.length}`,
         `Images bundled: ${imgCount}`,
-        "",
-        "Contents:",
-        "  plan.json      — full structured plan",
-        "  script.txt     — human-readable script",
-        "  scenes/*.jpg   — one image per scene prompt",
       ].join("\n"),
       { name: "README.txt" }
     );
 
     await archive.finalize();
+    console.log("[ZIP] Done ✓");
   } catch (err) {
-    console.error("Zip error:", err.message);
+    console.error("[ZIP] error:", err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
+    else res.end();
   }
 });
 
-/* ------------------------------------------------------------------ */
-/* Boot                                                                */
-/* ------------------------------------------------------------------ */
+/* -------------------- /api/buildVideo (Ken Burns + fades) -------------------- */
+app.post("/api/buildVideo", async (req, res) => {
+  console.log("[VIDEO] Request received");
+  const workDir = path.join(
+    os.tmpdir(),
+    `badger-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  );
+
+  try {
+    const { scenes, aspect = "16:9", title = "video" } = req.body || {};
+
+    if (!Array.isArray(scenes) || scenes.length === 0) {
+      return res.status(400).json({ error: "scenes[] is required" });
+    }
+    if (scenes.length > 20) {
+      return res.status(400).json({ error: "Max 20 scenes per video" });
+    }
+
+    const { width, height } =
+      aspect === "9:16" ? { width: 720, height: 1280 }
+      : aspect === "1:1" ? { width: 1024, height: 1024 }
+      : { width: 1280, height: 720 };
+
+    console.log("[VIDEO] Scenes:", scenes.length, "| Size:", width + "x" + height);
+
+    await fsp.mkdir(workDir, { recursive: true });
+
+    // Download images
+    console.log("[VIDEO] Downloading images...");
+    const imagePaths = [];
+
+    for (let i = 0; i < scenes.length; i++) {
+      const s = scenes[i];
+      if (!s.url) continue;
+
+      const imgPath = path.join(workDir, `scene${String(i).padStart(2, "0")}.jpg`);
+
+      try {
+        const r = await fetch(s.url, { signal: AbortSignal.timeout(60000) });
+        if (!r.ok) {
+          console.warn(`[VIDEO] Scene ${i} fetch failed:`, r.status);
+          continue;
+        }
+        const buf = Buffer.from(await r.arrayBuffer());
+        await fsp.writeFile(imgPath, buf);
+
+        imagePaths.push({
+          path: imgPath,
+          duration: Math.max(4, Math.min(15, Number(s.duration) || 8)),
+          caption: (s.caption || "").trim(),
+        });
+        console.log(`[VIDEO] Image ${i + 1}/${scenes.length} → ${Math.round(buf.length / 1024)} KB`);
+      } catch (e) {
+        console.warn(`[VIDEO] Scene ${i} error:`, e.message);
+      }
+    }
+
+    if (imagePaths.length === 0) {
+      throw new Error("No valid images could be downloaded");
+    }
+
+    // Build filter_complex with zoompan (Ken Burns) + fade + optional caption
+    const filterParts = [];
+
+    for (let i = 0; i < imagePaths.length; i++) {
+      const img = imagePaths[i];
+      const dur = img.duration;
+      const fps = 30;
+      const frames = Math.round(dur * fps);
+
+      // Zoompan: alternate zoom-in / zoom-out per scene for variety
+      // Scene 0: zoom in, Scene 1: zoom out, Scene 2: zoom in, ...
+      const zoomDirection = i % 2 === 0 ? "in" : "out";
+      let zoomExpr;
+      if (zoomDirection === "in") {
+        zoomExpr = "min(1+0.0009*on,1.18)";
+      } else {
+        zoomExpr = "max(1.18-0.0009*on,1)";
+      }
+
+      // Pan expression based on scene index for variety
+      const panModes = ["center", "left-to-right", "right-to-left", "top-down"];
+      const panMode = panModes[i % panModes.length];
+
+      let xExpr, yExpr;
+      if (panMode === "left-to-right") {
+        xExpr = "(iw-iw/zoom)*on/" + frames;
+        yExpr = "ih/2-(ih/zoom/2)";
+      } else if (panMode === "right-to-left") {
+        xExpr = "(iw-iw/zoom)*(1-on/" + frames + ")";
+        yExpr = "ih/2-(ih/zoom/2)";
+      } else if (panMode === "top-down") {
+        xExpr = "iw/2-(iw/zoom/2)";
+        yExpr = "(ih-ih/zoom)*on/" + frames;
+      } else {
+        xExpr = "iw/2-(iw/zoom/2)";
+        yExpr = "ih/2-(ih/zoom/2)";
+      }
+
+      // Base filters: scale → zoompan → fade in/out → format
+      let chain =
+        `[${i}:v]` +
+        `scale=${width * 2}:${height * 2}:force_original_aspect_ratio=increase,` +
+        `crop=${width * 2}:${height * 2},` +
+        `zoompan=z='${zoomExpr}':` +
+        `x='${xExpr}':y='${yExpr}':` +
+        `d=${frames}:` +
+        `s=${width}x${height}:fps=${fps},` +
+        `setsar=1,` +
+        `fade=t=in:st=0:d=0.6,` +
+        `fade=t=out:st=${(dur - 0.6).toFixed(2)}:d=0.6`;
+
+      // Optional caption overlay (drawtext)
+      if (img.caption) {
+        const escaped = img.caption
+          .replace(/\\/g, "\\\\")
+          .replace(/'/g, "\\'")
+          .replace(/:/g, "\\:")
+          .replace(/[\[\]]/g, "");
+        // Simple bottom-center caption
+        chain +=
+          `,drawtext=text='${escaped}':` +
+          `fontcolor=white:fontsize=${Math.round(width / 22)}:` +
+          `box=1:boxcolor=black@0.55:boxborderw=20:` +
+          `x=(w-text_w)/2:y=h-text_h-60:` +
+          `fontfile='C\\:/Windows/Fonts/arial.ttf'`;
+      }
+
+      chain += `,format=yuv420p[v${i}]`;
+      filterParts.push(chain);
+    }
+
+    // Concat all filtered scenes
+    const concatInputs = imagePaths.map((_, i) => `[v${i}]`).join("");
+    filterParts.push(
+      `${concatInputs}concat=n=${imagePaths.length}:v=1:a=0[outv]`
+    );
+
+    const filterComplex = filterParts.join(";");
+    const outputPath = path.join(workDir, "output.mp4");
+
+    console.log("[VIDEO] Encoding with Ken Burns + fades...");
+
+    await new Promise((resolve, reject) => {
+      const cmd = ffmpeg();
+
+      imagePaths.forEach((img) => {
+        cmd.input(img.path).inputOptions(["-loop 1", `-t ${img.duration}`]);
+      });
+
+      cmd
+        .complexFilter(filterComplex)
+        .outputOptions([
+          "-map", "[outv]",
+          "-r", "30",
+          "-c:v", "libx264",
+          "-preset", "ultrafast",
+          "-crf", "25",
+          "-movflags", "+faststart",
+          "-pix_fmt", "yuv420p",
+        ])
+        .output(outputPath)
+        .on("start", () => console.log("[VIDEO] FFmpeg start"))
+        .on("stderr", (line) => {
+          if (line && (line.includes("Error") || line.includes("failed"))) {
+            console.log("[FFMPEG]", line);
+          }
+        })
+        .on("progress", (p) => {
+          if (p.percent && Math.round(p.percent) % 20 === 0) {
+            console.log(`[VIDEO] Progress: ${p.percent.toFixed(1)}%`);
+          }
+        })
+        .on("end", () => {
+          console.log("[VIDEO] Encoding done ✓");
+          resolve();
+        })
+        .on("error", (err) => {
+          console.error("[VIDEO] FFmpeg error:", err.message);
+          reject(err);
+        })
+        .run();
+    });
+
+    const videoBuf = await fsp.readFile(outputPath);
+    console.log("[VIDEO] Video size:", Math.round(videoBuf.length / 1024), "KB");
+
+    const safeTitle = (typeof title === "string" ? title : "video")
+      .replace(/[^a-z0-9-_]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60)
+      .toLowerCase() || "video";
+
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.mp4"`);
+    res.setHeader("Content-Length", videoBuf.length);
+    res.send(videoBuf);
+
+    console.log("[VIDEO] Sent ✓");
+
+    setTimeout(() => {
+      fsp.rm(workDir, { recursive: true, force: true }).catch(() => {});
+    }, 5000);
+  } catch (err) {
+    console.error("[VIDEO] Error:", err.message);
+    fsp.rm(workDir, { recursive: true, force: true }).catch(() => {});
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || "Video build failed" });
+    }
+  }
+});
+
+/* -------------------- Boot -------------------- */
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
