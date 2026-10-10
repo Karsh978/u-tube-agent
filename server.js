@@ -28,7 +28,7 @@ const PROVIDERS = {
 
 app.use(express.static(path.join(process.cwd(), "public")));
 
-/* Health */
+/* -------------------- Health -------------------- */
 app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
@@ -43,20 +43,21 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(process.cwd(), "public", "index.html"));
 });
 
-/* -------------------- Prompt builder (15 scenes, time-targeted) -------------------- */
-function buildPrompts(topic, targetMinutes = 1.5) {
+/* -------------------- Prompt builder -------------------- */
+function buildPrompts(topic, targetMinutes = 1) {
   const now = new Date();
   const today = now.toLocaleDateString("en-US", {
     year: "numeric", month: "long", day: "numeric",
   });
   const year = now.getFullYear();
   const targetSeconds = Math.round(targetMinutes * 60);
+  const sceneCount = Math.max(6, Math.min(15, Math.round(targetSeconds / 6)));
 
   const system = `You are an expert YouTube Content Strategist. Today's date is ${today}. Apply YouTube best practices as of ${year}. Respond with one strict, valid JSON object only: no markdown, no code fences, no commentary.`;
 
-  const user = `Create a complete YouTube video blueprint for this topic: "${topic}"
+  const user = `Create a complete YouTube video blueprint for topic: "${topic}"
 
-TARGET: The video should be around ${targetSeconds} seconds total (about ${targetMinutes} minutes).
+TARGET: ${targetSeconds} seconds total (~${targetMinutes} min).
 
 TITLE: 40-60 characters, keyword near start, honest.
 
@@ -66,19 +67,18 @@ TAGS: 8-12 tags. Under 400 chars total.
 
 SCRIPT OUTLINE:
 - Each item is "M:SS - Section title: one-line summary".
-- EXACTLY 15 sections. No more, no less.
-- Total script length suited for ${targetSeconds} seconds of video.
-- Start with "0:00" hook (5-15 sec payoff).
+- EXACTLY ${sceneCount} sections.
+- Start with "0:00" hook.
 - End with CTA to next video.
 
 THUMBNAIL IDEAS: Exactly 3 concepts.
 
 SCENE-BY-SCENE VISUAL PROMPTS:
-- EXACTLY 15 prompts. One per section.
+- EXACTLY ${sceneCount} prompts (one per section).
 - Format: "A [shot type] of [subject] in [setting], [lighting], [mood], [style]"
-- Vary shot types and lighting across scenes.
-- Each scene "duration" should be around ${Math.round(targetSeconds / 15)} seconds.
-- "scene" matches timestamp. "caption": max 6 words for subtitle.
+- Vary shot types and lighting.
+- "duration" ≈ ${Math.round(targetSeconds / sceneCount)} seconds.
+- "caption": max 6 words.
 
 Return ONLY this JSON:
 {
@@ -106,7 +106,7 @@ function parseModelJson(raw) {
 
 const str = (v) => (typeof v === "string" ? v.trim() : "");
 
-function normalize(data, targetSeconds) {
+function normalize(data, targetSeconds, targetCount) {
   const tags = (Array.isArray(data.tags) ? data.tags : [])
     .map((t) => str(t).replace(/^#+/, "")).filter(Boolean);
 
@@ -122,7 +122,7 @@ function normalize(data, targetSeconds) {
       : { text: str(x?.text), visual: str(x?.visual) })
     .filter((x) => x.text || x.visual).slice(0, 3);
 
-  const sceneByScenePrompts = (Array.isArray(data.sceneByScenePrompts)
+  let sceneByScenePrompts = (Array.isArray(data.sceneByScenePrompts)
     ? data.sceneByScenePrompts : []
   ).map((s) => ({
     scene: str(s?.scene),
@@ -131,22 +131,20 @@ function normalize(data, targetSeconds) {
     duration: Number.isFinite(s?.duration) ? Number(s.duration) : 6,
   })).filter((s) => s.prompt);
 
-  // ⚙️ Enforce 15 scenes exactly — pad or trim
-  while (sceneByScenePrompts.length < 15) {
+  while (sceneByScenePrompts.length < targetCount) {
     const idx = sceneByScenePrompts.length;
     sceneByScenePrompts.push({
       scene: `Scene ${idx + 1}`,
-      prompt: `A cinematic shot related to the topic, scene ${idx + 1}, varied lighting and mood, ultra-realistic`,
+      prompt: `A cinematic shot related to the topic, scene ${idx + 1}, varied lighting and mood`,
       caption: "",
       duration: 6,
     });
   }
-  const trimmed = sceneByScenePrompts.slice(0, 15);
+  sceneByScenePrompts = sceneByScenePrompts.slice(0, targetCount);
 
-  // ⚙️ Scale durations so total ~ targetSeconds
-  const sumDur = trimmed.reduce((a, b) => a + b.duration, 0) || 1;
+  const sumDur = sceneByScenePrompts.reduce((a, b) => a + b.duration, 0) || 1;
   const scale = targetSeconds / sumDur;
-  trimmed.forEach((s) => {
+  sceneByScenePrompts.forEach((s) => {
     s.duration = Math.max(3, Math.min(15, Math.round(s.duration * scale * 10) / 10));
   });
 
@@ -157,16 +155,14 @@ function normalize(data, targetSeconds) {
     scriptOutline: (Array.isArray(data.scriptOutline) ? data.scriptOutline : [])
       .map(str).filter(Boolean),
     thumbnailIdeas,
-    sceneByScenePrompts: trimmed,
+    sceneByScenePrompts,
   };
 
-  if (!result.title || !result.scriptOutline.length) {
-    throw new Error("Missing required fields");
-  }
+  if (!result.title || !result.scriptOutline.length) throw new Error("Missing fields");
   return result;
 }
 
-/* -------------------- Provider calls -------------------- */
+/* -------------------- Providers -------------------- */
 async function callGroq({ system, user, apiKey }) {
   const { default: Groq } = await import("groq-sdk");
   const client = new Groq({ apiKey });
@@ -207,8 +203,9 @@ async function generatePlan(req, res) {
     if (!topic) return res.status(400).json({ error: "Topic is required" });
     if (topic.length > 200) return res.status(400).json({ error: "Topic too long" });
 
-    const targetMinutes = Math.max(0.5, Math.min(5, Number(body.targetMinutes) || 1.5));
+    const targetMinutes = Math.max(0.5, Math.min(3, Number(body.targetMinutes) || 1));
     const targetSeconds = Math.round(targetMinutes * 60);
+    const targetCount = Math.max(6, Math.min(15, Math.round(targetSeconds / 6)));
 
     const provider = (body.provider || "groq").toLowerCase();
     if (!PROVIDERS[provider]) return res.status(400).json({ error: "Unsupported provider" });
@@ -220,24 +217,25 @@ async function generatePlan(req, res) {
 
     const { system, user } = buildPrompts(topic, targetMinutes);
     const raw = await CALLERS[provider]({ system, user, apiKey });
-    const data = normalize(parseModelJson(raw), targetSeconds);
+    const data = normalize(parseModelJson(raw), targetSeconds, targetCount);
 
     const totalDur = data.sceneByScenePrompts.reduce((a, b) => a + b.duration, 0);
-    console.log(`[PLAN] ${data.sceneByScenePrompts.length} scenes | Total ≈ ${Math.round(totalDur)}s (target ${targetSeconds}s)`);
+    console.log(`[PLAN] ${data.sceneByScenePrompts.length} scenes | Total ≈ ${Math.round(totalDur)}s`);
 
     res.json({ success: true, provider, data, totalDuration: totalDur });
   } catch (error) {
     console.error("Generation error:", error.message);
-    const msg = error.message || "Failed to generate";
     const badKey = error.status === 401 || error.status === 403;
-    res.status(badKey ? 401 : 500).json({ error: badKey ? "API key rejected." : msg });
+    res.status(badKey ? 401 : 500).json({
+      error: badKey ? "API key rejected." : (error.message || "Failed to generate"),
+    });
   }
 }
 
 app.post("/api/generatePlan", generatePlan);
 app.post("/api/generateScript", generatePlan);
 
-/* ==================== MEDIA HELPERS ==================== */
+/* -------------------- MEDIA HELPERS -------------------- */
 function buildPicsumUrl(seed, width, height) {
   return `https://picsum.photos/seed/${seed}/${width}/${height}`;
 }
@@ -254,12 +252,13 @@ async function hfTextToImage({ prompt, apiKey, model = "black-forest-labs/FLUX.1
 }
 
 function aspectDims(aspect) {
+  // 480p for memory efficiency
   if (aspect === "9:16") return { width: 480, height: 854 };
   if (aspect === "1:1") return { width: 640, height: 640 };
-  return { width: 854, height: 480 };  // 1280×720 → 854×480
+  return { width: 854, height: 480 };
 }
 
-/* ==================== /api/generateMedia ==================== */
+/* -------------------- /api/generateMedia -------------------- */
 app.post("/api/generateMedia", async (req, res) => {
   try {
     const { prompts, aspect = "16:9", engine = "auto" } = req.body || {};
@@ -304,7 +303,7 @@ app.post("/api/generateMedia", async (req, res) => {
   }
 });
 
-/* ==================== /api/downloadZip ==================== */
+/* -------------------- /api/downloadZip -------------------- */
 app.post("/api/downloadZip", async (req, res) => {
   try {
     const { plan, aspect = "16:9" } = req.body || {};
@@ -365,7 +364,6 @@ app.post("/api/downloadZip", async (req, res) => {
       }
 
       if (!buf) return null;
-
       const sceneTag = String(s.scene || `scene-${i + 1}`)
         .replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "") || `scene-${i + 1}`;
       return { fname: `scenes/${String(i + 1).padStart(2, "0")}-${sceneTag}.jpg`, buf };
@@ -389,13 +387,11 @@ app.post("/api/downloadZip", async (req, res) => {
   }
 });
 
-/* ==================== VOICEOVER (msedge-tts) ==================== */
+/* -------------------- VOICEOVER -------------------- */
 async function generateVoiceover({ text, outPath, voice = "en-US-AriaNeural" }) {
-  console.log("[VOICE] Generating:", voice, "| text length:", text.length);
-
+  console.log("[VOICE] Generating:", voice, "| length:", text.length);
   const tts = new MsEdgeTTS();
   await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-
   const { audioStream } = tts.toStream(text.slice(0, 2000));
 
   const chunks = [];
@@ -403,19 +399,16 @@ async function generateVoiceover({ text, outPath, voice = "en-US-AriaNeural" }) 
     audioStream.on("data", (c) => chunks.push(c));
     audioStream.on("end", () => resolve(Buffer.concat(chunks)));
     audioStream.on("error", reject);
-   setTimeout(() => reject(new Error("TTS timeout after 15s")), 15000);
+    setTimeout(() => reject(new Error("TTS timeout")), 15000);
   });
 
-  if (!audio || audio.length < 100) {
-    throw new Error("TTS returned empty audio");
-  }
-
+  if (!audio || audio.length < 100) throw new Error("Empty audio");
   await fsp.writeFile(outPath, audio);
   console.log("[VOICE] Saved:", Math.round(audio.length / 1024), "KB");
   return outPath;
 }
 
-/* ==================== /api/buildVideo ==================== */
+/* -------------------- /api/buildVideo -------------------- */
 app.post("/api/buildVideo", async (req, res) => {
   console.log("[VIDEO] Request received");
   const workDir = path.join(os.tmpdir(),
@@ -430,12 +423,12 @@ app.post("/api/buildVideo", async (req, res) => {
     if (!Array.isArray(scenes) || !scenes.length) {
       return res.status(400).json({ error: "scenes[] required" });
     }
-    if (scenes.length > 25) return res.status(400).json({ error: "Max 25 scenes" });
+    if (scenes.length > 20) return res.status(400).json({ error: "Max 20 scenes" });
 
     const { width, height } =
-      aspect === "9:16" ? { width: 720, height: 1280 }
-      : aspect === "1:1" ? { width: 1024, height: 1024 }
-      : { width: 1280, height: 720 };
+      aspect === "9:16" ? { width: 480, height: 854 }
+      : aspect === "1:1" ? { width: 640, height: 640 }
+      : { width: 854, height: 480 };
 
     console.log("[VIDEO] Scenes:", scenes.length, "| Size:", width + "x" + height);
 
@@ -450,16 +443,12 @@ app.post("/api/buildVideo", async (req, res) => {
       const imgPath = path.join(workDir, `scene${String(i).padStart(2, "0")}.jpg`);
       try {
         const r = await fetch(s.url, { signal: AbortSignal.timeout(60000) });
-        if (!r.ok) { console.warn(`Scene ${i} fetch failed:`, r.status); continue; }
+        if (!r.ok) continue;
         const buf = Buffer.from(await r.arrayBuffer());
         await fsp.writeFile(imgPath, buf);
         const dur = Math.max(3, Math.min(15, Number(s.duration) || 6));
-        imagePaths.push({
-          path: imgPath,
-          duration: dur,
-          caption: str(s.caption),
-        });
-        console.log(`Image ${i + 1}/${scenes.length} → ${Math.round(buf.length / 1024)} KB (dur: ${dur}s)`);
+        imagePaths.push({ path: imgPath, duration: dur, caption: str(s.caption) });
+        console.log(`Image ${i + 1}/${scenes.length} → ${Math.round(buf.length / 1024)} KB`);
       } catch (e) {
         console.warn(`Scene ${i} error:`, e.message);
       }
@@ -467,7 +456,6 @@ app.post("/api/buildVideo", async (req, res) => {
 
     if (imagePaths.length === 0) throw new Error("No valid images");
 
-    // Build concat.txt
     const concatPath = path.join(workDir, "concat.txt");
     let concatContent = "";
     for (const img of imagePaths) {
@@ -477,32 +465,32 @@ app.post("/api/buildVideo", async (req, res) => {
     }
     const lastImg = imagePaths[imagePaths.length - 1].path.replace(/\\/g, "/");
     concatContent += `file '${lastImg}'\n`;
-
     await fsp.writeFile(concatPath, concatContent, "utf8");
 
     const totalDur = imagePaths.reduce((a, b) => a + b.duration, 0);
-    console.log("[VIDEO] Concat ready | Total video duration:", Math.round(totalDur), "s");
+    console.log("[VIDEO] Concat ready | Total:", Math.round(totalDur), "s");
 
     const outputPath = path.join(workDir, "video-no-audio.mp4");
 
-    console.log("[VIDEO] Encoding with FFmpeg...");
-
+    // Memory-optimized FFmpeg encode
+    console.log("[VIDEO] Encoding...");
     await new Promise((resolve, reject) => {
       ffmpeg()
         .input(concatPath)
-      .outputOptions([
-  `-vf`, `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0x0B0D12,eq=contrast=1.08:saturation=1.15,format=yuv420p`,
-  "-r", "24",
-  "-c:v", "libx264",
-  "-preset", "ultrafast",
-  "-crf", "28",
-  "-threads", "1",              // 🔥 Single thread — memory 40% kam
-  "-rc-lookahead", "10",        // 🔥 Default 40 → 10 (buffer kam) [citation:11]
-  "-refs", "1",                 // 🔥 Reference frames 3 → 1 (memory kam) [citation:5]
-  "-max_muxing_queue_size", "512", // 🔥 Buffer overflow prevent [citation:5]
-  "-movflags", "+faststart",
-  "-pix_fmt", "yuv420p",
-])
+        .inputOptions(["-f concat", "-safe 0"])
+        .outputOptions([
+          "-vf", `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0x0B0D12,eq=contrast=1.08:saturation=1.15,format=yuv420p`,
+          "-r", "24",
+          "-c:v", "libx264",
+          "-preset", "ultrafast",
+          "-crf", "28",
+          "-threads", "1",
+          "-rc-lookahead", "10",
+          "-refs", "1",
+          "-max_muxing_queue_size", "512",
+          "-movflags", "+faststart",
+          "-pix_fmt", "yuv420p",
+        ])
         .output(outputPath)
         .on("start", () => console.log("[VIDEO] FFmpeg started"))
         .on("stderr", (line) => {
@@ -510,22 +498,15 @@ app.post("/api/buildVideo", async (req, res) => {
             console.log("[FFMPEG]", line);
           }
         })
-        .on("progress", (p) => {
-          if (p.percent && Math.round(p.percent) % 25 === 0) {
-            console.log(`[VIDEO] Progress: ${p.percent.toFixed(1)}%`);
-          }
-        })
-        .on("end", () => { console.log("[VIDEO] Video encoded ✓"); resolve(); })
-        .on("error", (err) => { console.error("[VIDEO] FFmpeg error:", err.message); reject(err); })
+        .on("end", () => { console.log("[VIDEO] Encoded ✓"); resolve(); })
+        .on("error", (err) => { console.error("[VIDEO] FFmpeg:", err.message); reject(err); })
         .run();
     });
 
-    // Voiceover + merge
+    // Voiceover
     let finalPath = outputPath;
-
     if (voiceover) {
       try {
-        // Use full prompt + caption for longer audio
         const voScript = scenes
           .map((s) => {
             const c = str(s.caption);
@@ -536,26 +517,20 @@ app.post("/api/buildVideo", async (req, res) => {
           .join(". ");
 
         if (voScript.length > 5) {
-          console.log("[VOICE] Voiceover requested, script length:", voScript.length);
+          console.log("[VOICE] Requested, script:", voScript.length);
           const audioPath = path.join(workDir, "voiceover.mp3");
 
-          const voiceoverPromise = generateVoiceover({
-            text: voScript,
-            outPath: audioPath,
-            voice,
-          });
-
-          const voiceoverTimeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Voiceover total timeout 40s")), 40000)
+          const voPromise = generateVoiceover({ text: voScript, outPath: audioPath, voice });
+          const voTimeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Voiceover total timeout")), 30000)
           );
 
           try {
-            await Promise.race([voiceoverPromise, voiceoverTimeout]);
+            await Promise.race([voPromise, voTimeout]);
             console.log("[VOICE] Audio ready");
 
             const mergedPath = path.join(workDir, "video-final.mp4");
-            console.log("[VIDEO] Merging audio + video...");
-
+            console.log("[VIDEO] Merging...");
             await new Promise((resolve) => {
               ffmpeg()
                 .input(outputPath)
@@ -563,34 +538,29 @@ app.post("/api/buildVideo", async (req, res) => {
                 .outputOptions([
                   "-c:v", "copy",
                   "-c:a", "aac",
-                  "-b:a", "128k",
+                  "-b:a", "96k",
                   "-map", "0:v:0",
                   "-map", "1:a:0",
                   "-movflags", "+faststart",
                 ])
                 .output(mergedPath)
-                .on("end", () => { console.log("[VIDEO] Audio merged ✓"); resolve(); })
-                .on("error", (err) => {
-                  console.error("[VIDEO] Merge error:", err.message);
-                  resolve();
-                })
+                .on("end", () => { console.log("[VIDEO] Merged ✓"); resolve(); })
+                .on("error", (err) => { console.error("[VIDEO] Merge:", err.message); resolve(); })
                 .run();
             });
 
-            if (fs.existsSync(mergedPath)) {
-              finalPath = mergedPath;
-            }
+            if (fs.existsSync(mergedPath)) finalPath = mergedPath;
           } catch (voiceErr) {
-            console.warn("[VOICE] Failed — using silent video:", voiceErr.message);
+            console.warn("[VOICE] Failed — silent video:", voiceErr.message);
           }
         }
       } catch (e) {
-        console.warn("[VIDEO] Voiceover failed:", e.message);
+        console.warn("[VIDEO] Voiceover error:", e.message);
       }
     }
 
     const videoBuf = await fsp.readFile(finalPath);
-    console.log("[VIDEO] Final size:", Math.round(videoBuf.length / 1024), "KB");
+    console.log("[VIDEO] Final:", Math.round(videoBuf.length / 1024), "KB");
 
     const safeTitle = (str(title) || "video")
       .replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "")
@@ -600,8 +570,8 @@ app.post("/api/buildVideo", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.mp4"`);
     res.setHeader("Content-Length", videoBuf.length);
     res.send(videoBuf);
-
     console.log("[VIDEO] Sent ✓");
+
     setTimeout(() => {
       fsp.rm(workDir, { recursive: true, force: true }).catch(() => {});
     }, 5000);
@@ -615,8 +585,8 @@ app.post("/api/buildVideo", async (req, res) => {
 /* -------------------- Boot -------------------- */
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`\n🦡 Badger running on http://localhost:${PORT}\n`);
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`\n🦡 Badger running on http://0.0.0.0:${PORT}\n`);
   });
 }
 
