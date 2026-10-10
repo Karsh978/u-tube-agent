@@ -254,9 +254,9 @@ async function hfTextToImage({ prompt, apiKey, model = "black-forest-labs/FLUX.1
 }
 
 function aspectDims(aspect) {
-  if (aspect === "9:16") return { width: 720, height: 1280 };
-  if (aspect === "1:1") return { width: 1024, height: 1024 };
-  return { width: 1280, height: 720 };
+  if (aspect === "9:16") return { width: 480, height: 854 };
+  if (aspect === "1:1") return { width: 640, height: 640 };
+  return { width: 854, height: 480 };  // 1280×720 → 854×480
 }
 
 /* ==================== /api/generateMedia ==================== */
@@ -403,7 +403,7 @@ async function generateVoiceover({ text, outPath, voice = "en-US-AriaNeural" }) 
     audioStream.on("data", (c) => chunks.push(c));
     audioStream.on("end", () => resolve(Buffer.concat(chunks)));
     audioStream.on("error", reject);
-    setTimeout(() => reject(new Error("TTS timeout after 30s")), 30000);
+   setTimeout(() => reject(new Error("TTS timeout after 15s")), 15000);
   });
 
   if (!audio || audio.length < 100) {
@@ -490,16 +490,19 @@ app.post("/api/buildVideo", async (req, res) => {
     await new Promise((resolve, reject) => {
       ffmpeg()
         .input(concatPath)
-        .inputOptions(["-f concat", "-safe 0"])
-        .outputOptions([
-          `-vf`, `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0x0B0D12,eq=contrast=1.08:saturation=1.15,format=yuv420p`,
-          "-r", "30",
-          "-c:v", "libx264",
-          "-preset", "ultrafast",
-          "-crf", "26",
-          "-movflags", "+faststart",
-          "-pix_fmt", "yuv420p",
-        ])
+      .outputOptions([
+  `-vf`, `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0x0B0D12,eq=contrast=1.08:saturation=1.15,format=yuv420p`,
+  "-r", "24",
+  "-c:v", "libx264",
+  "-preset", "ultrafast",
+  "-crf", "28",
+  "-threads", "1",              // 🔥 Single thread — memory 40% kam
+  "-rc-lookahead", "10",        // 🔥 Default 40 → 10 (buffer kam) [citation:11]
+  "-refs", "1",                 // 🔥 Reference frames 3 → 1 (memory kam) [citation:5]
+  "-max_muxing_queue_size", "512", // 🔥 Buffer overflow prevent [citation:5]
+  "-movflags", "+faststart",
+  "-pix_fmt", "yuv420p",
+])
         .output(outputPath)
         .on("start", () => console.log("[VIDEO] FFmpeg started"))
         .on("stderr", (line) => {
